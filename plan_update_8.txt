@@ -1,0 +1,6 @@
+If MARGEN_VALOR in Oracle is 4.0965, why did my real output produce 7,272,858 instead of 6,199,163 ?
+Wait. In `debug_dates.py`: `row_oracle = {'CLASE_INT': 'FIJA', 'MARGEN_VALOR': 4.0965, 'SDO_US': 297694990.22}`
+And the output was 6.199M.
+In my real `python main.py` execution, the output was 7.272M for `pago_interes` on 2028-12-15.
+Let's figure out what `SDO_US` or `margen` or `factor` it's using.
+Is `SDO_US` higher in the real data?

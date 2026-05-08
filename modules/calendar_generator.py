@@ -108,11 +108,11 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
 
     return valid_dates
 
-def generate_interest_calendar(row_guias, cutoff_date):
+def generate_interest_calendar(combined_row, cutoff_date):
     """
-    Generates a list of interest payment dates based on Guias periodicity.
-    row_guias: Must contain 'FECHA INICIAL INTERES', 'FECHA FINAL INTERES',
-               'PERIODICIDAD PAGO INTERESES', 'MES PERIODICIDAD'
+    Generates a list of interest payment dates based on combined_row.
+    combined_row: Must contain 'FECHA INICIAL INTERES', 'FECHA FINAL INTERES',
+                  'PERIODICIDAD PAGO INTERESES', 'MES PERIODICIDAD'
     """
     try:
         cutoff = pd.to_datetime(cutoff_date)
@@ -120,19 +120,19 @@ def generate_interest_calendar(row_guias, cutoff_date):
         logger.error(f"Invalid cutoff_date: {e}")
         return []
 
-    if row_guias is None or row_guias.empty:
+    if combined_row is None or (isinstance(combined_row, (pd.DataFrame, pd.Series)) and combined_row.empty):
         return []
 
-    start_date = pd.to_datetime(row_guias.get('FECHA INICIAL INTERES'), errors='coerce')
-    end_date = pd.to_datetime(row_guias.get('FECHA FINAL INTERES'), errors='coerce')
-    periodicity = str(row_guias.get('PERIODICIDAD PAGO INTERESES')).strip().upper()
-    credito_id = row_guias.get('ID_CREDITO', 'Unknown')
+    start_date = pd.to_datetime(combined_row.get('FECHA INICIAL INTERES'), errors='coerce')
+    end_date = pd.to_datetime(combined_row.get('FECHA FINAL INTERES'), errors='coerce')
+    periodicity = str(combined_row.get('PERIODICIDAD PAGO INTERESES')).strip().upper()
+    credito_id = combined_row.get('ID_CREDITO', 'Unknown')
 
     if pd.isna(start_date) or pd.isna(end_date) or start_date > end_date:
         return []
 
     if periodicity == 'GUIA':
-        periodicity = str(row_guias.get('MES PERIODICIDAD')).strip()
+        periodicity = str(combined_row.get('MES PERIODICIDAD')).strip()
 
     try:
         p = float(periodicity)
@@ -156,9 +156,7 @@ def generate_interest_calendar(row_guias, cutoff_date):
     dates = []
     if months_step > 0:
         current = start_date
-        # We generally jump to next period, or the start_date is the first payment?
-        # Usually FECHA INICIAL INTERES is start of accrual. First payment is start_date + periodicity
-        current += relativedelta(months=months_step)
+        # FECHA INICIAL INTERES is actually the first payment date
         while current <= end_date:
             dates.append(current)
             current += relativedelta(months=months_step)

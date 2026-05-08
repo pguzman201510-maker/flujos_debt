@@ -1,0 +1,8 @@
+Ah! SDO_US in Consulta Oracle is 349,255,800.
+But in Inventario it's `297694990.22`.
+And in `debug_dates.py` I used `297694990.22` (which is from Inventario!).
+But the instruction says "La generacion del flujo de amortizaciones debe realizarse tomando como base el saldo SDO_US". So the real SDO_US is 349.255M.
+Wait. The user example specifically says:
+`5,111,001,660,001 	15-dic-2028	 297,694,990.22 	 6,199,163.26 `
+So the expected amortization is `297,694,990.22`. But the `SDO_US` in Oracle is `3.492558e+08`.
+Is SDO_US = `SALDO_REAL`? Let me check Oracle data again.

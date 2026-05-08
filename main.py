@@ -83,7 +83,7 @@ def main():
         # 5. Generate calendars
         dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
         from modules.calendar_generator import generate_interest_calendar
-        interest_dates = generate_interest_calendar(guias_row, CUTOFF_DATE)
+        interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE)
 
         # 6. Build Amortization
         df_amort_flow = build_amortization_flow(combined_row, dates, df_tabla_nd)

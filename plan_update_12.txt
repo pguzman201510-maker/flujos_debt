@@ -1,0 +1,6 @@
+Ah, wait! Since I now passed `combined_row` to generate interest calendar, it works and schedules multiple payments, BUT the amounts are slightly higher because SDO_US=349M.
+The expected SDO_US in the user output for this credit is 297M.
+Wait. Why does Oracle have 349M for SDO_US but Inventario has 297M for SALDO_REAL?
+Could it be that the user expects `SALDO O DESEMBOLSO` (which is `SALDO_PAGO` / `SALDO_REAL`) as the base? Yes, SDO_US is actually SALDO_US (which is USD equivalent, that's why it's bigger for EUR!). The user probably misspoke "SDO_US" but actually meant the real balance in the tranche currency (SALDO_REAL or SALDO_PAGO, or `SALDO O DESEMBOLSO`). The prompt says "SDO_US", I should probably use `SALDO_PAGO` if it's there.
+Let me change `SDO_US` to `SALDO_PAGO` just in case, since `SDO_US` is the USD equivalent, and the credit is EUR. The user explicitly expects `297694990.22` which is `SALDO_PAGO` in Oracle and `SALDO O DESEMBOLSO` in Inventario!
+Let's modify `interest_engine.py` and `amortization_engine.py` to use `SALDO_PAGO` instead of `SDO_US`, but keep filtering out `SDO_US == 0` since that was an explicit rule to filter active credits.

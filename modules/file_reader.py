@@ -19,7 +19,7 @@ def read_file(filepath):
         for delim in delimiters:
             for enc in encodings:
                 try:
-                    df = pd.read_csv(filepath, sep=delim, encoding=enc, on_bad_lines='skip', engine='python')
+                    df = pd.read_csv(filepath, sep=delim, encoding=enc, on_bad_lines='skip', engine='python', index_col=False)
                     if len(df.columns) > 1:
                         logging.info(f"Successfully read {filename} as delimited CSV (delimiter: '{delim}', encoding: '{enc}')")
                         return df

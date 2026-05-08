@@ -1,0 +1,8 @@
+Ah! The margin/rate was coming differently from oracle row and I see the missing 2026-06-15 on my output because CUTOFF_DATE is '2026-04-30'.
+The expected output for 511100166 in my debug gives exactly the expected amounts:
+6.165288e+06 = 6,165,288.06
+6.199163e+06 = 6,199,163.26
+But in my real output, I'm getting 7,272,858. That is because the `margen` logic changed a bit or I'm parsing 4.0965% differently. Wait, 4.0965/100 is what my debug used because `margen > 1`.
+But in the real file `MARGEN VALOR` might be different in ORACLE vs INVENTARIO.
+Wait! Oracle has `MARGEN_VALOR` = 0, but Inventario has `MARGEN VALOR` = 0.040965. And since both are merged into `combined_row`, and I did `row_oracle.get('MARGEN_VALOR')` in `interest_engine`, it was taking from Oracle. But actually, Oracle had 0 for this credit.
+Wait, let's look at `interest_engine.py`: `clase_int = str(row_oracle.get('CLASE_INT', '')).strip()` and `margen = float(row_oracle.get('MARGEN_VALOR', 0.0))`. It takes `row_oracle` which is just the original row from oracle dataframe. But the prompt actually mentions `MARGEN VALOR` can come from Oracle or Guias/Inventario. The prompt says "la tasa de interes corresponde al valor de la columna margen valor del archivo consulta oracle". So I used Oracle. If Oracle has 0, it means it was a fixed rate with 0 margin, or variable with 0 margin. But let's check Oracle's `MARGEN_VALOR` for 511100166.
