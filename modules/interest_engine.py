@@ -110,7 +110,8 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         interes = balance * rate * factor
         flow.append({
             'fecha_operacion': current_date,
-            'pago_interes': max(0, interes)
+            'pago_interes': max(0, interes),
+            'tasa_aplicada': rate
         })
 
         # Advance

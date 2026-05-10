@@ -104,6 +104,7 @@ def main():
         elif not df_amort_flow.empty:
             df_combined = df_amort_flow.copy()
             df_combined['pago_interes'] = 0.0
+            df_combined['tasa_aplicada'] = pd.NA
         elif not df_interest_flow.empty:
             df_combined = df_interest_flow.copy()
             df_combined['pago_amortizacion'] = 0.0
@@ -117,6 +118,8 @@ def main():
                 df_combined['pago_amortizacion'] = df_combined['pago_amortizacion'].fillna(0.0)
             if 'pago_interes' in df_combined.columns:
                 df_combined['pago_interes'] = df_combined['pago_interes'].fillna(0.0)
+            if 'tasa_aplicada' not in df_combined.columns:
+                df_combined['tasa_aplicada'] = pd.NA
 
             # Attach basic info
             df_combined['COD_CREDITO'] = row.get('COD_CREDITO')

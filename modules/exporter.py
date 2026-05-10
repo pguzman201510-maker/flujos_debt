@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 def export_flow(flow_list, output_path):
     """
     Consolidates the list of flows and exports to an Excel file.
-    Output columns: COD_CREDITO, MDA_TR, PMISTA, fecha_operacion, pago_amortizacion, pago_interes
+    Output columns: COD_CREDITO, MDA_TR, PMISTA, fecha_operacion, pago_amortizacion, pago_interes, tasa_aplicada
     """
     if not flow_list:
         logger.warning("No flows to export.")
@@ -14,7 +14,7 @@ def export_flow(flow_list, output_path):
 
     df_consolidated = pd.concat(flow_list, ignore_index=True)
 
-    expected_cols = ['COD_CREDITO', 'MDA_TR', 'PMISTA', 'fecha_operacion', 'pago_amortizacion', 'pago_interes']
+    expected_cols = ['COD_CREDITO', 'MDA_TR', 'PMISTA', 'fecha_operacion', 'pago_amortizacion', 'pago_interes', 'tasa_aplicada']
 
     # Ensure columns exist, fill with missing if they don't
     for col in expected_cols:

@@ -1,0 +1,8 @@
+User wants to add a new column to the output `tasa_aplicada` (or similar) that shows the final interest rate applied for that specific period.
+For fixed rates, this is just the margin/fixed rate.
+For variable rates, it's the forward rate + margin.
+
+I need to:
+1. Update `modules/interest_engine.py` to return the `tasa_aplicada` in the flow.
+2. Update `main.py` where flows are combined to make sure this new column is kept and handled properly.
+3. Update `modules/exporter.py` to include `tasa_aplicada` in the expected final export columns.
