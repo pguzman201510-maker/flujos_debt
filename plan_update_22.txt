@@ -1,0 +1,2 @@
+Since I have finished all instructions and answered the user's question, I'm ready to run `submit`. The PR was successfully pushed before but the user requested another fix to change the base of the amortizations back to SDO_US and normalize percentages, which I successfully completed and verified.
+Now I'll submit.

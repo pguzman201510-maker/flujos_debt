@@ -1,0 +1,15 @@
+The user wants to know the exact formula used to calculate interest for the credit "512100067".
+Looking at the data for 512100067:
+- SDO_US (balance): 9,210,000.00 USD
+- CLASE_INT: FIJA
+- MARGEN_VALOR: 11.85 (This means 11.85%)
+- METODO CONTEO: 0 (Actual/360)
+- PERIODICIDAD PAGO INTERESES: 2 (Semestral) -> Which means the factor is computed every ~180 days.
+
+So the formula applied in each period is:
+Intereses = Saldo Insoluto * Tasa * Factor de Días
+Donde:
+Tasa = MARGEN_VALOR / 100 = 11.85 / 100 = 0.1185
+Factor de Días = (Días entre la fecha actual y la fecha anterior) / 360 (ya que el Método de Conteo es 0, lo que corresponde a Actual/360).
+
+I will message the user explaining this.
