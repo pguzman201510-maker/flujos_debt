@@ -5,14 +5,11 @@ logger = logging.getLogger(__name__)
 
 def build_amortization_flow(row, dates, df_tabla_nd):
     """
-    Distributes SALDO_PAGO (or SDO_US fallback) across the dates.
+    Distributes SDO_US across the dates.
     For ND, uses % Real from df_tabla_nd if available.
     Otherwise, divides equally or completely at the end (bullet).
     """
-    # Prefer SALDO_PAGO / SALDO_REAL which is the true balance in currency
-    sdo_us = row.get('SALDO_PAGO')
-    if pd.isna(sdo_us) or sdo_us == 0:
-        sdo_us = row.get('SDO_US', 0)
+    sdo_us = row.get('SDO_US', 0)
     try:
         sdo_us = float(sdo_us)
     except:
@@ -47,12 +44,19 @@ def build_amortization_flow(row, dates, df_tabla_nd):
             except:
                 pass
 
-        for d in dates:
-            pct = pct_map.get(d, 0.0)
-            payment = sdo_us * pct
+        # Normalize percentages for the exact dates we have
+        total_pct = sum(pct_map.get(d, 0.0) for d in dates)
 
-            # Prevent overpayment if percentages sum to > 1
-            if payment > current_balance:
+        for i, d in enumerate(dates):
+            pct = pct_map.get(d, 0.0)
+            if total_pct > 0:
+                payment = sdo_us * (pct / total_pct)
+            else:
+                # Fallback if no percentages or sum is 0
+                payment = sdo_us / n_periods
+
+            # Prevent overpayment
+            if payment > current_balance or i == n_periods - 1:
                 payment = current_balance
 
             current_balance -= payment

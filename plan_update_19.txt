@@ -1,0 +1,8 @@
+Ah, for some credits in ND, the sum of percentages is NOT 1 (e.g. 2.0).
+In `amortization_engine.py`, my code did: `payment = sdo_us * pct`.
+If sum of pct is 2.0, payment is 2x SDO_US (capped by current_balance to prevent overpayment). If sum is 0.05, payment is 5% of SDO_US! That's why total is less!
+To fix this: `pct_map` should be normalized to 1 for the *remaining* dates!
+Wait, if `tabla_nd` dictates the exact distribution, maybe we should distribute `SDO_US` proportionally among the REMAINING dates according to their relative weights in `tabla_nd`?
+Let's see: if a loan has 3 remaining dates with weights 0.2, 0.3, 0.5, we just use 0.2, 0.3, 0.5.
+If the weights in `tabla_nd` don't sum to 1.0 for the remaining dates, we MUST normalize them so that the sum of amortizations exactly equals `SDO_US`.
+Let me update `amortization_engine.py` to normalize the percentages.

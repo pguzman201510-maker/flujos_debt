@@ -27,12 +27,8 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     metodo_conteo = row_guias.get('METODO CONTEO') if row_guias is not None else None
 
-    # Try SALDO_PAGO first, then SDO_US
     try:
-        sdo = row_oracle.get('SALDO_PAGO')
-        if pd.isna(sdo) or sdo == 0:
-            sdo = row_oracle.get('SDO_US', 0)
-        initial_balance = float(sdo)
+        initial_balance = float(row_oracle.get('SDO_US', 0))
     except:
         initial_balance = 0.0
 

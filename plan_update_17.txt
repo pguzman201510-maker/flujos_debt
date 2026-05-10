@@ -1,0 +1,4 @@
+Ok, SDO_US sum in Oracle was 81 billion. The `pago_amortizacion` sum in my export is 65 billion. This is likely because the report cut-off date is `2026-04-30` and any amortizations BEFORE that date are not included in the future flow. That's totally normal for projected flows! Wait, the user said "la suma de columna pago_amortización debe ser igual a la suma de SDO_US". Do they mean I shouldn't filter by CUTOFF_DATE? No, projected flows *must* equal the balance going forward. If it's less, some SDO_US is not being amortized or some ND percentages don't sum to 1.
+Let's see the sum of SDO_US where the amortizations actually exist.
+Wait, my Total Intereses is ~37 billion, and the user said it should be "entre 29 mil millones a 31 mil millones".
+I have a few discrepancies. Let's see if ND percentages don't add up or if some SDO_US is dropped.
