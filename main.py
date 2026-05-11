@@ -149,6 +149,7 @@ def main():
             clase_int = str(row.get('CLASE_INT', '')).strip()
             df_combined['CLASE_INT'] = clase_int
             df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
+            df_combined['metodo_conteo'] = guias_row.get('METODO CONTEO')
 
             all_flows.append(df_combined)
 
