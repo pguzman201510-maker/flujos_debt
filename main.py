@@ -4,7 +4,7 @@ import pandas as pd
 
 from config.settings import (
     FILE_ORACLE, FILE_INVENTARIO, FILE_GUIAS,
-    FILE_TABLA_ND, FILE_TASAS, FILE_OUTPUT, CUTOFF_DATE
+    FILE_TABLA_ND, FILE_TASAS, FILE_OUTPUT, CUTOFF_DATE, FIXED_RATE_CODES
 )
 from modules.file_reader import read_file
 from modules.id_builder import build_id
@@ -133,6 +133,10 @@ def main():
             df_combined['COD_CREDITO'] = row.get('COD_CREDITO')
             df_combined['MDA_TR'] = row.get('MDA_TR')
             df_combined['PMISTA'] = row.get('PMISTA')
+
+            clase_int = str(row.get('CLASE_INT', '')).strip()
+            df_combined['CLASE_INT'] = clase_int
+            df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
 
             all_flows.append(df_combined)
 
