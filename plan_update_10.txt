@@ -1,5 +1,0 @@
-Ah! SDO_US in Oracle is actually 349.255M for some reason (maybe converted to another currency in the `SDO_US` column?), but `SALDO_PAGO` and `SALDO_REAL` are `2.976950e+08`.
-But the user prompt literally said: "La generación del flujo de amortizaciones debe realizarse tomando como base el saldo SDO_US".
-I literally implemented it according to the prompt!
-If the prompt says "tomando como base el saldo SDO_US", and SDO_US is 349M, then the amortization is 349M. However, if the user says the expected output is 297M, then maybe it was supposed to be `SALDO_PAGO` or `SALDO_REAL` ?
-Actually, wait, let me look at `MDA_TR` vs `COD_MONEDA`.

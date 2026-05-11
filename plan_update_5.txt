@@ -1,2 +1,0 @@
-It seems there is a trailing tab in the data rows of `proy_inventario_perfil.xls`, making it 36 fields for 35 header fields. pandas `read_csv` shifts columns because it treats the first column as an index if data has one more column than header.
-I will fix `modules/file_reader.py` to use `index_col=False` to prevent this shift.

@@ -1,9 +1,0 @@
-Ah! SDO_US sum is ~81 billion. My total amort sum is 3.9 trillion!
-Why is my amort sum so huge?
-Because of the ND percentages!
-If the ND table has `% Real`, but there are MULTIPLE credits mapped to the same ID? Or maybe the percentages are huge?
-Let's check `amortization_engine.py`.
-Also, the user explicitly said "la suma de columna pago_amortización debe ser igual a la suma de SDO_US de la conuslta oracle".
-So they DO want `SDO_US` as the base for amortizations! I had changed it to `SALDO_PAGO` in my last PR to fix the interest, but they actually want `SDO_US`.
-Wait, if they want SDO_US, why did the example show 297M for 511100166?
-Because that's a different currency? No, the example is just "how the dates and interests should look". I shouldn't have changed `SDO_US`! I will revert `SALDO_PAGO` back to `SDO_US`!

@@ -1,8 +1,0 @@
-The user is pointing out that the credit '542100106' is not generating any interest, despite having info in `Tasas_forward.xlsx` and a spread `MARGEN_VALOR`.
-
-Let me investigate this specific credit: `542100106`
-1. Check Oracle data for `542100106` (CLASE_INT, MARGEN_VALOR, SDO_US).
-2. Check Guias data for `542100106` (FECHA INICIAL INTERES, FECHA FINAL INTERES, PERIODICIDAD PAGO INTERESES).
-3. Run my code and see if interest dates are generated and if rate is found in `Tasas_forward.xlsx`.
-
-Let's do this debugging now.

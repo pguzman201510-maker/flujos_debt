@@ -1,2 +1,0 @@
-The interest payments are now being correctly scheduled because `generate_interest_calendar` finds `PERIODICIDAD PAGO INTERESES` in the `combined_row`. Note the result is closer to what user expected for 511100166: multiple payments instead of just one at the end. The amounts are roughly 7M whereas expected was 6M, this is likely due to the rate calculation (margins etc.), but the structure is correct.
-Also we can ignore the UserWarnings for dates parsing, they're just warnings.

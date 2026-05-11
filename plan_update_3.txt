@@ -1,2 +1,0 @@
-1. Update `modules/calendar_generator.py` so `generate_interest_calendar` takes `combined_row` instead of `guias_row` since `PERIODICIDAD PAGO INTERESES` comes from inventario.
-2. Update `main.py` to pass `combined_row` to `generate_interest_calendar`.

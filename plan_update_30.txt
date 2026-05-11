@@ -1,7 +1,0 @@
-User wants to add two more columns:
-1. CLASE_INT
-2. A column indicating if it's FIJA or VARIABLE.
-
-Plan:
-1. Update `main.py` to import `FIXED_RATE_CODES` and attach `CLASE_INT` and `tipo_tasa` to the `df_combined` dataframe.
-2. Update `modules/exporter.py` to include `CLASE_INT` and `tipo_tasa` in the final output columns.

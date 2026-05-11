@@ -1,2 +1,0 @@
-1. The `proy_inventario_perfil.xls` is not reading the columns properly because the first line (header) seems to have a different number of fields than the data, or it's misaligned when reading as CSV. We used `on_bad_lines='skip'`, but the columns are shifted. Notice `CREDITO` has `1` and `INTEGRADO` is an index but the dates are shifted.
-2. I need to fix `modules/file_reader.py` to properly handle the header mismatch or separator. Let's see how the raw file looks.

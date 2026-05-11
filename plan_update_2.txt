@@ -1,2 +1,0 @@
-1. Update `main.py` to properly merge `guias_row` into `combined_row`.
-2. Update `interest_engine.py` to correctly calculate the accrual period start when interest dates prior to the cutoff date are filtered out.

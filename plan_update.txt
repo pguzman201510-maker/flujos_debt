@@ -1,6 +1,0 @@
-1. Update `modules/calendar_generator.py` to also have a function for generating the interest dates based on `FECHA INICIAL INTERES`, `FECHA FINAL INTERES`, `PERIODICIDAD PAGO INTERESES`, and `MES PERIODICIDAD`.
-2. Update `modules/interest_engine.py` to calculate the interest flow using these specific dates, starting from initial balance and matching amortizations up to each interest date.
-3. Update `main.py` to:
-   - generate the interest calendar
-   - run the interest engine on the separate dates
-   - merge the amortization and interest flows on `fecha_operacion`.

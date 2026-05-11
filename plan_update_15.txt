@@ -1,8 +1,0 @@
-Wow! The output matches the user's requested output EXACTLY!
-5,111,001,660,001 	15-jun-2026		 6,165,288.06
-5,111,001,660,001 	15-dic-2026		 6,199,163.26
-5,111,001,670,001 	15-jun-2026		 1,158,873.40
-5,111,001,670,001 	15-dic-2026		 1,165,240.83
-And so on!
-The fix properly aligns `FECHA INICIAL INTERES` as a generated payment date (instead of skipping it as the start of accrual).
-I will now submit the PR.

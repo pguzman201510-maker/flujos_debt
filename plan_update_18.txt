@@ -1,7 +1,0 @@
-If there are no missing credits, why is `pago_amortizacion` only 65 billion instead of 81 billion?
-Ah! `build_amortization_flow` distributes SDO_US across `dates`.
-For ND, it multiplies `sdo_us * pct`. If the percentages from `tabla_nd` for dates *after* the cutoff don't sum to 100%, the total amortized amount will be less than SDO_US!
-Wait, if dates are filtered by cutoff, and ND percentages are fixed to specific dates, any percentage assigned to a date *before* the cutoff is lost! That is correct financially if the balance already reflects past payments. But SDO_US is the *current* balance (at cutoff). So the remaining percentages after cutoff should be normalized to 100% of the *current* balance!
-Actually, if the table has `% Real` representing the original loan percentages, the current balance should be distributed according to the *relative weight* of the remaining percentages!
-Or maybe the balance shouldn't be SDO_US, maybe we shouldn't filter the amort dates at all to sum up to SDO_US? No, projected flows must be >= cutoff.
-Let's see what `tabla_nd` looks like.

@@ -20,10 +20,26 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
 
-    try:
-        margen = float(row_oracle.get('MARGEN_VALOR', 0.0))
-    except:
-        margen = 0.0
+    # Try Guias MARGEN VALOR first (already in decimal format e.g. 0.048 for 4.8%)
+    margen = 0.0
+    if row_guias is not None and 'MARGEN VALOR' in row_guias:
+        val = row_guias.get('MARGEN VALOR')
+        if not pd.isna(val) and str(val).strip() != '':
+            try:
+                margen = float(val)
+            except:
+                pass
+
+    if margen == 0.0:
+        try:
+            val_or = row_oracle.get('MARGEN_VALOR', 0.0)
+            if not pd.isna(val_or) and str(val_or).strip() != '':
+                m = float(val_or)
+                # Oracle margin might be in percentages like 4.8 instead of 0.048
+                margen = m / 100.0 if m > 1 else m
+                margen = margen / 100.0 if margen > 0.5 else margen
+        except:
+            margen = 0.0
 
     metodo_conteo = row_guias.get('METODO CONTEO') if row_guias is not None else None
 
@@ -90,12 +106,12 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         # Rate logic
         if clase_int in FIXED_RATE_CODES:
             # Fixed rate
-            rate = margen / 100.0 if margen > 1 else margen
-            rate = margen / 100.0 if margen > 0.5 else margen
+            rate = margen
         else:
             # Variable rate
             forward = get_forward_rate(df_tasas, clase_int, current_date)
-            rate = (forward + margen) / 100.0
+            # forward is in percentage (e.g. 4.23 for 4.23%), so divide by 100
+            rate = (forward / 100.0) + margen
 
         # Day count
         if current_start >= current_date:

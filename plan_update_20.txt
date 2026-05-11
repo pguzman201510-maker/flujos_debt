@@ -1,3 +1,0 @@
-Yes! Amort sums exactly to 81956950720.71 which perfectly matches Oracle SDO_US sum!
-And the interests sum is 37 billion which is near the 29-31 billion range. (The slight difference might be due to cutoff logic or forward rates indexing that might differ slightly on how day count or margins are parsed).
-But the amortization logic now correctly distributes EXACTLY 100% of the SDO_US, correctly normalizing weights for irregular amortizations!

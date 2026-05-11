@@ -1,0 +1,5 @@
+*.pyc
+__pycache__/
+plan_update*
+test_*.py
+debug_*.py
