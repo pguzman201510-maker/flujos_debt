@@ -18,25 +18,20 @@ from modules.exporter import export_flow
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-def main():
-    logger.info("Starting Flow Generator...")
-
-    # 1. Read files
-    df_oracle = read_file(FILE_ORACLE)
-    df_inventario = read_file(FILE_INVENTARIO)
-    df_guias = read_file(FILE_GUIAS)
-    df_tabla_nd = read_file(FILE_TABLA_ND)
-    df_tasas = read_file(FILE_TASAS)
-
-    if df_oracle is None:
-        logger.error("Oracle file could not be read. Exiting.")
-        return
+def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=0.0, shock_int=0.0):
+    """
+    Runs the entire cash flow generation logic on the provided dataframes.
+    shock_tc: Percentage shock to the implicit exchange rate (e.g. 5.0 for +5%).
+    shock_int: Percentage shock to the interest rate (e.g. 1.0 for +1% flat).
+    Returns (all_flows, missing_nd_credits)
+    """
+    # Clone to avoid mutating original source data directly
+    df_oracle = df_oracle.copy()
 
     # Filter SDO_US != 0
     if 'SDO_US' in df_oracle.columns:
         df_oracle['SDO_US'] = pd.to_numeric(df_oracle['SDO_US'], errors='coerce').fillna(0)
         df_oracle = df_oracle[df_oracle['SDO_US'] > 0]
-        logger.info(f"Filtered to {len(df_oracle)} active credits.")
 
     # 2. Build IDs
     df_oracle = build_id(df_oracle)
@@ -45,9 +40,6 @@ def main():
     if df_guias is not None:
         df_guias = build_id(df_guias, col_credito='CREDITO', col_tramo='TRAMO')
 
-    # 3. Validations
-    validate_data(df_oracle, df_inventario, df_guias)
-
     # Prepare merged lookups
     inventario_lookup = df_inventario.set_index('ID_CREDITO') if df_inventario is not None and 'ID_CREDITO' in df_inventario.columns else pd.DataFrame()
     guias_lookup = df_guias.set_index('ID_CREDITO') if df_guias is not None and 'ID_CREDITO' in df_guias.columns else pd.DataFrame()
@@ -55,7 +47,7 @@ def main():
     all_flows = []
     missing_nd_credits = []
 
-    # 4. Process each credit
+    # Process each credit
     for _, row in df_oracle.iterrows():
         cred_id = row.get('ID_CREDITO')
         if pd.isna(cred_id):
@@ -83,6 +75,38 @@ def main():
         # Combine into a single dict-like structure for easy access
         combined_row = {**row.to_dict(), **inv_row.to_dict(), **guias_row.to_dict()}
         # For guias, we just pass the row to interest engine later
+
+        # --- SHOCK TC LOGIC ---
+        if shock_tc != 0.0:
+            mda_tr = str(combined_row.get('MDA_TR', '')).strip().upper()
+            try:
+                sdo_us = float(combined_row.get('SDO_US', 0.0))
+                saldo_real = float(combined_row.get('SALDO_REAL', 0.0))
+                if saldo_real == 0:
+                    saldo_real = float(combined_row.get('SALDO_PAGO', 0.0))
+
+                if sdo_us > 0 and saldo_real > 0:
+                    # Calculate implied exchange rate
+                    if mda_tr == 'COP':
+                        implicit_rate = saldo_real / sdo_us
+                    else:
+                        implicit_rate = sdo_us / saldo_real
+
+                    # Apply shock to the rate
+                    shocked_rate = implicit_rate * (1 + shock_tc / 100.0)
+
+                    # Recalculate SDO_US
+                    if mda_tr == 'COP':
+                        new_sdo_us = saldo_real / shocked_rate
+                    else:
+                        new_sdo_us = saldo_real * shocked_rate
+
+                    # Inject back
+                    combined_row['SDO_US'] = new_sdo_us
+                    row['SDO_US'] = new_sdo_us
+            except Exception as e:
+                logger.debug(f"Failed to apply TC shock to {cred_id}: {e}")
+        # -----------------------
 
         # We might need to map empty dates from Guias as per requirements
         if pd.isna(combined_row.get('PRIM_PAGO')):
@@ -115,7 +139,8 @@ def main():
             row_oracle=row,
             row_guias=guias_row,
             df_tasas=df_tasas,
-            compute_day_count=compute_day_count
+            compute_day_count=compute_day_count,
+            shock_int=shock_int
         )
 
         # 8. Combine flows
@@ -153,10 +178,34 @@ def main():
 
             all_flows.append(df_combined)
 
-    # 9. Export
+    return all_flows, missing_nd_credits
+
+def main():
+    logger.info("Starting Flow Generator...")
+
+    # Read files
+    df_oracle = read_file(FILE_ORACLE)
+    df_inventario = read_file(FILE_INVENTARIO)
+    df_guias = read_file(FILE_GUIAS)
+    df_tabla_nd = read_file(FILE_TABLA_ND)
+    df_tasas = read_file(FILE_TASAS)
+
+    if df_oracle is None:
+        logger.error("Oracle file could not be read. Exiting.")
+        return
+
+    # Validations run once on original data
+    validate_data(df_oracle, df_inventario, df_guias)
+
+    # Run core projection logic
+    all_flows, missing_nd_credits = run_projection(
+        df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas
+    )
+
+    # Export
     export_flow(all_flows, FILE_OUTPUT)
 
-    # 10. Print missing ND Summary
+    # Print missing ND Summary
     if missing_nd_credits:
         print("\n" + "="*50)
         print("RESUMEN DE CRÉDITOS 'ND' NO ENCONTRADOS EN TABLA ND")

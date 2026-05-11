@@ -5,7 +5,7 @@ from modules.forward_rates import get_forward_rate
 
 logger = logging.getLogger(__name__)
 
-def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_guias, df_tasas, compute_day_count):
+def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_guias, df_tasas, compute_day_count, shock_int=0.0):
     """
     Computes interest payments for each period in the standalone interest flow.
     interest_dates: list of pd.Timestamp
@@ -112,6 +112,9 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
             forward = get_forward_rate(df_tasas, clase_int, current_date)
             # forward is in percentage (e.g. 4.23 for 4.23%), so divide by 100
             rate = (forward / 100.0) + margen
+
+        if shock_int != 0.0:
+            rate += (shock_int / 100.0)
 
         # Day count
         if current_start >= current_date:
