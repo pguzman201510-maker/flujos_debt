@@ -65,8 +65,20 @@ def main():
         guias_row = guias_lookup.loc[cred_id] if cred_id in guias_lookup.index else pd.Series()
 
         # If multiple matches, just take the first one
-        if isinstance(inv_row, pd.DataFrame): inv_row = inv_row.iloc[0]
-        if isinstance(guias_row, pd.DataFrame): guias_row = guias_row.iloc[0]
+        if isinstance(inv_row, pd.DataFrame):
+            inv_row = inv_row.iloc[0]
+
+        if isinstance(guias_row, pd.DataFrame):
+            # Pick the active guide (FECHA FINAL INTERES >= CUTOFF_DATE)
+            active_guias = []
+            for _, g_row in guias_row.iterrows():
+                end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce')
+                if not pd.isna(end_date) and end_date >= pd.to_datetime(CUTOFF_DATE):
+                    active_guias.append(g_row)
+            if active_guias:
+                guias_row = active_guias[0]
+            else:
+                guias_row = guias_row.iloc[-1]
 
         # Combine into a single dict-like structure for easy access
         combined_row = {**row.to_dict(), **inv_row.to_dict(), **guias_row.to_dict()}
