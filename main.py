@@ -53,6 +53,7 @@ def main():
     guias_lookup = df_guias.set_index('ID_CREDITO') if df_guias is not None and 'ID_CREDITO' in df_guias.columns else pd.DataFrame()
 
     all_flows = []
+    missing_nd_credits = []
 
     # 4. Process each credit
     for _, row in df_oracle.iterrows():
@@ -79,6 +80,13 @@ def main():
         if pd.isna(combined_row.get('ULT_PAGO')):
             if 'FECHA VENCIMIENTO' in combined_row and not pd.isna(combined_row['FECHA VENCIMIENTO']):
                 combined_row['ULT_PAGO'] = combined_row['FECHA VENCIMIENTO']
+
+        # Track missing ND credits
+        periodicity = str(combined_row.get('TIPO AMORTIZACION', '')).strip().upper()
+        if periodicity == 'ND':
+            if df_tabla_nd is None or df_tabla_nd.empty or not (df_tabla_nd['ID Crédito'].astype(str) == str(cred_id)).any():
+                if cred_id not in missing_nd_credits:
+                    missing_nd_credits.append(cred_id)
 
         # 5. Generate calendars
         dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
@@ -130,6 +138,18 @@ def main():
 
     # 9. Export
     export_flow(all_flows, FILE_OUTPUT)
+
+    # 10. Print missing ND Summary
+    if missing_nd_credits:
+        print("\n" + "="*50)
+        print("RESUMEN DE CRÉDITOS 'ND' NO ENCONTRADOS EN TABLA ND")
+        print("="*50)
+        print("Los siguientes créditos tienen tipo de amortización 'ND',")
+        print("pero no se encontró su flujo de pago en 'tabla_nd.xlsx':\n")
+        for c in missing_nd_credits:
+            print(f" - {c}")
+        print("="*50 + "\n")
+
     logger.info("Processing complete.")
 
 if __name__ == "__main__":
