@@ -114,21 +114,51 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     current_start = start_date
     for current_date in interest_dates:
+        # MBID/BIRF Specific Logic
+        pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
+
         # Rate logic
         if clase_int in FIXED_RATE_CODES:
             # Fixed rate
             rate = margen
         else:
             # Variable rate
-            forward = get_forward_rate(df_tasas, clase_int, current_date)
+            index_col = clase_int
+            spread_premium = 0.0
+
+            if pmista == 'BIRF':
+                # Calculate maturity in years from PRIM_PAGO to ULT_PAGO
+                prim_pago = pd.to_datetime(row_oracle.get('PRIM_PAGO'), errors='coerce')
+                ult_pago = pd.to_datetime(row_oracle.get('ULT_PAGO'), errors='coerce')
+                years = 0.0
+                if not pd.isna(prim_pago) and not pd.isna(ult_pago) and ult_pago >= prim_pago:
+                    years = (ult_pago - prim_pago).days / 365.25
+
+                if clase_int == 'UBIR':
+                    index_col = 'TSO6'
+                    if years < 7: spread_premium = 0.0075
+                    elif years <= 8: spread_premium = 0.0105
+                    elif years <= 12: spread_premium = 0.0120
+                    elif years <= 15: spread_premium = 0.0135
+                    elif years <= 18: spread_premium = 0.0150
+                    else: spread_premium = 0.0165
+                elif clase_int == 'EBIR':
+                    index_col = 'EUL6'
+                    if years < 7: spread_premium = 0.0061
+                    elif years <= 8: spread_premium = 0.0071
+                    elif years <= 12: spread_premium = 0.0086
+                    elif years <= 15: spread_premium = 0.0101
+                    elif years <= 18: spread_premium = 0.0116
+                    else: spread_premium = 0.0131
+
+            forward = get_forward_rate(df_tasas, index_col, current_date)
             # forward is in percentage (e.g. 4.23 for 4.23%), so divide by 100
-            rate = (forward / 100.0) + margen
+            rate = (forward / 100.0) + spread_premium + margen
 
         if shock_int != 0.0:
             rate += (shock_int / 100.0)
 
         # MBID Condition
-        pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
         if pmista == 'BID':
             rate += MBID_RATE
 
