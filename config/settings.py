@@ -16,3 +16,6 @@ CUTOFF_DATE = "2026-04-30" # From file name
 
 # Fixed rate indicators
 FIXED_RATE_CODES = ["FUFI", "FIJA", "SINI", "FI19"]
+
+# Dynamic Spreads
+MBID_RATE = 0.0080 # 0.80% changes quarterly

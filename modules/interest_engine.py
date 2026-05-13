@@ -1,6 +1,6 @@
 import pandas as pd
 import logging
-from config.settings import FIXED_RATE_CODES
+from config.settings import FIXED_RATE_CODES, MBID_RATE
 from modules.forward_rates import get_forward_rate
 
 logger = logging.getLogger(__name__)
@@ -115,6 +115,11 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
         if shock_int != 0.0:
             rate += (shock_int / 100.0)
+
+        # MBID Condition
+        pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
+        if pmista == 'BID':
+            rate += MBID_RATE
 
         # Day count
         if current_start >= current_date:
