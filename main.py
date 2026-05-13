@@ -137,6 +137,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             interest_dates=interest_dates,
             df_amortization_flow=df_amort_flow,
             row_oracle=row,
+            row_inv=inv_row,
             row_guias=guias_row,
             df_tasas=df_tasas,
             compute_day_count=compute_day_count,

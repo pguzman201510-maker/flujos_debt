@@ -5,12 +5,13 @@ from modules.forward_rates import get_forward_rate
 
 logger = logging.getLogger(__name__)
 
-def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_guias, df_tasas, compute_day_count, shock_int=0.0):
+def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_inv, row_guias, df_tasas, compute_day_count, shock_int=0.0):
     """
     Computes interest payments for each period in the standalone interest flow.
     interest_dates: list of pd.Timestamp
     df_amortization_flow: DataFrame containing 'fecha_operacion', 'saldo_insoluto'.
     row_oracle: contains CLASE_INT, MARGEN_VALOR, SDO_US
+    row_inv: contains accurate unrounded MARGEN VALOR
     row_guias: contains METODO CONTEO, FECHA INICIAL INTERES
     df_tasas: DataFrame for forward rates.
     compute_day_count: callable function compute_day_count(start_date, end_date, method) -> (days, factor)
@@ -20,16 +21,26 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
 
-    # Try Guias MARGEN VALOR first (already in decimal format e.g. 0.048 for 4.8%)
     margen = 0.0
-    if row_guias is not None and 'MARGEN VALOR' in row_guias:
-        val = row_guias.get('MARGEN VALOR')
-        if not pd.isna(val) and str(val).strip() != '':
+
+    # Try Inventario MARGEN VALOR first (high precision decimal)
+    val_inv = row_inv.get('MARGEN VALOR') if row_inv is not None else None
+    if not pd.isna(val_inv) and str(val_inv).strip() != '' and str(val_inv).strip().upper() != 'GUIA':
+        try:
+            margen = float(val_inv)
+        except:
+            pass
+
+    # If GUIA or missing, try Guias MARGEN VALOR
+    if margen == 0.0 and row_guias is not None and 'MARGEN VALOR' in row_guias:
+        val_guias = row_guias.get('MARGEN VALOR')
+        if not pd.isna(val_guias) and str(val_guias).strip() != '':
             try:
-                margen = float(val)
+                margen = float(val_guias)
             except:
                 pass
 
+    # Fallback to Oracle
     if margen == 0.0:
         try:
             val_or = row_oracle.get('MARGEN_VALOR', 0.0)
