@@ -176,6 +176,23 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
             df_combined['metodo_conteo'] = guias_row.get('METODO CONTEO')
 
+            # --- CONVERT TO LOCAL CURRENCY LOGIC ---
+            try:
+                sdo_us_orig = float(row.get('SDO_US', 0.0))
+                saldo_real_orig = float(row.get('SALDO_REAL', 0.0))
+                if saldo_real_orig == 0:
+                    saldo_real_orig = float(row.get('SALDO_PAGO', 0.0))
+
+                if sdo_us_orig > 0 and saldo_real_orig > 0:
+                    conv_factor = saldo_real_orig / sdo_us_orig
+                else:
+                    conv_factor = 1.0
+            except:
+                conv_factor = 1.0
+
+            df_combined['amort_mda_real'] = df_combined['pago_amortizacion'] * conv_factor
+            df_combined['intereses_mda_real'] = df_combined['pago_interes'] * conv_factor
+
             all_flows.append(df_combined)
 
     return all_flows, missing_nd_credits

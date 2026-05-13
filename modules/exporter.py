@@ -16,7 +16,7 @@ def export_flow(flow_list, output_path):
     expected_cols = [
         'COD_CREDITO', 'MDA_TR', 'PMISTA', 'CLASE_INT', 'tipo_tasa',
         'metodo_conteo', 'fecha_operacion', 'pago_amortizacion',
-        'pago_interes', 'tasa_aplicada'
+        'pago_interes', 'tasa_aplicada', 'amort_mda_real', 'intereses_mda_real'
     ]
 
     # Ensure columns exist, fill with missing if they don't
