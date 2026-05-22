@@ -36,6 +36,17 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     if not is_bullet and prim_pago == ult_pago:
         is_bullet = True
 
+    # Fallback for empty periodicity when it's not a bullet
+    if not is_bullet:
+        p_str = str(periodicity).strip().upper()
+        if p_str == 'NAN' or p_str == 'NONE' or p_str == '':
+            # Look at interest periodicity
+            int_per = str(row.get('PERIODICIDAD PAGO INTERESES', '')).strip().upper()
+            if int_per == 'GUIA':
+                periodicity = str(row.get('MES PERIODICIDAD', '')).strip()
+            elif int_per != 'NAN' and int_per != 'NONE' and int_per != '':
+                periodicity = int_per
+
     dates = []
 
     if is_bullet:
