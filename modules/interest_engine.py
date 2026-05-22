@@ -117,14 +117,17 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         # MBID/BIRF Specific Logic
         pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
 
-        # Rate logic
-        if clase_int in FIXED_RATE_CODES:
-            # Fixed rate
-            rate = margen
+        is_fixed = clase_int in FIXED_RATE_CODES
+
+        # Base annual rate components
+        spread_premium = 0.0
+        forward_val = 0.0
+
+        if is_fixed:
+            base_annual_rate = margen
         else:
             # Variable rate
             index_col = clase_int
-            spread_premium = 0.0
 
             if pmista == 'BIRF':
                 # Calculate maturity in years from PRIM_PAGO to ULT_PAGO
@@ -151,23 +154,30 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
                     elif years <= 18: spread_premium = 0.0116
                     else: spread_premium = 0.0131
 
-            forward = get_forward_rate(df_tasas, index_col, current_date)
-            # forward is in percentage (e.g. 4.23 for 4.23%), so divide by 100
-            rate = (forward / 100.0) + spread_premium + margen
+            forward_val = get_forward_rate(df_tasas, index_col, current_date) / 100.0
+            base_annual_rate = forward_val + spread_premium + margen
 
+        # Add Annual MBID margin (Only for variable rates per user instruction)
+        if pmista == 'BID' and not is_fixed:
+            base_annual_rate += MBID_RATE
+
+        # Add Annual shock
         if shock_int != 0.0:
-            rate += (shock_int / 100.0)
+            base_annual_rate += (shock_int / 100.0)
 
-        # MBID Condition
-        if pmista == 'BID':
-            rate += MBID_RATE
-
-        # Day count
+        # Day count or Frequency division
         if current_start >= current_date:
-            # safety net
             current_start = current_date - pd.DateOffset(months=6)
 
-        _, factor = compute_day_count(current_start, current_date, metodo_conteo)
+        if not is_fixed:
+            # User instruction: divide nominal variable rate by the frequency
+            frequency = float(p) if p > 0 else 1.0
+            factor = 1.0 / frequency
+        else:
+            # Fixed rates continue using standard Day Count Conventions
+            _, factor = compute_day_count(current_start, current_date, metodo_conteo)
+
+        rate = base_annual_rate
 
         # Balance used is the balance at `current_start`
         balance = get_balance_at(current_start)
