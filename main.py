@@ -113,9 +113,13 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             # If dates missing, try to get from Guias or inventario (FECHA PRIMER PAGO)
             if 'FECHA PRIMER PAGO' in combined_row and not pd.isna(combined_row['FECHA PRIMER PAGO']):
                 combined_row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
-        if pd.isna(combined_row.get('ULT_PAGO')):
-            if 'FECHA VENCIMIENTO' in combined_row and not pd.isna(combined_row['FECHA VENCIMIENTO']):
-                combined_row['ULT_PAGO'] = combined_row['FECHA VENCIMIENTO']
+
+        # Override ULT_PAGO unconditionally from FECHA VENCIMIENTO
+        if 'FECHA VENCIMIENTO' in combined_row and not pd.isna(combined_row['FECHA VENCIMIENTO']) and str(combined_row['FECHA VENCIMIENTO']).strip() != '':
+            combined_row['ULT_PAGO'] = combined_row['FECHA VENCIMIENTO']
+            row['ULT_PAGO'] = combined_row['FECHA VENCIMIENTO']
+        elif pd.isna(combined_row.get('ULT_PAGO')):
+            pass # kept for logic completeness but handled above
 
         # Track missing ND credits
         periodicity = str(combined_row.get('TIPO AMORTIZACION', '')).strip().upper()
