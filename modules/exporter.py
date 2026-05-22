@@ -14,7 +14,7 @@ def export_flow(flow_list, output_path):
     df_consolidated = pd.concat(flow_list, ignore_index=True)
 
     expected_cols = [
-        'COD_CREDITO', 'MDA_TR', 'PMISTA', 'CLASE_INT', 'tipo_tasa',
+        'ID_CREDITO', 'COD_CREDITO', 'MDA_TR', 'PMISTA', 'CLASE_INT', 'tipo_tasa',
         'metodo_conteo', 'fecha_operacion', 'pago_amortizacion',
         'pago_interes', 'tasa_aplicada', 'amort_mda_real', 'intereses_mda_real'
     ]
@@ -27,7 +27,7 @@ def export_flow(flow_list, output_path):
     df_final = df_consolidated[expected_cols].copy()
 
     # Sort
-    df_final.sort_values(by=['COD_CREDITO', 'fecha_operacion'], inplace=True)
+    df_final.sort_values(by=['ID_CREDITO', 'fecha_operacion'], inplace=True)
 
     try:
         df_final.to_excel(output_path, index=False)

@@ -100,8 +100,8 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
             if dates and dates[-1] < ult_pago:
                  dates.append(ult_pago)
 
-    # Filter dates >= cutoff_date
-    valid_dates = [d for d in dates if d >= cutoff]
+    # Filter dates > cutoff_date strictly
+    valid_dates = [d for d in dates if d > cutoff]
 
     # Sort dates just in case
     valid_dates.sort()
@@ -150,7 +150,7 @@ def generate_interest_calendar(combined_row, cutoff_date):
         months_step = int(p)
     else:
         logger.warning(f"Credit {credito_id}: Unknown interest periodicity {periodicity}. Assuming BULLET at end_date.")
-        valid_dates = [end_date] if end_date >= cutoff else []
+        valid_dates = [end_date] if end_date > cutoff else []
         return valid_dates
 
     dates = []
@@ -164,6 +164,6 @@ def generate_interest_calendar(combined_row, cutoff_date):
         if not dates or dates[-1] < end_date:
              dates.append(end_date)
 
-    valid_dates = [d for d in dates if d >= cutoff]
+    valid_dates = [d for d in dates if d > cutoff]
     valid_dates.sort()
     return valid_dates

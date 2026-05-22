@@ -168,6 +168,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
                 df_combined['tasa_aplicada'] = pd.NA
 
             # Attach basic info
+            df_combined['ID_CREDITO'] = row.get('ID_CREDITO')
             df_combined['COD_CREDITO'] = row.get('COD_CREDITO')
             df_combined['MDA_TR'] = row.get('MDA_TR')
             df_combined['PMISTA'] = row.get('PMISTA')
