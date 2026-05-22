@@ -46,6 +46,11 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
                 periodicity = str(row.get('MES PERIODICIDAD', '')).strip()
             elif int_per != 'NAN' and int_per != 'NONE' and int_per != '':
                 periodicity = int_per
+        elif p_str == 'ND':
+            # Fallback if ND is not found in tabla_nd
+            if df_tabla_nd is None or df_tabla_nd.empty or not (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
+                logger.warning(f"Credit {credito_id}: Type ND but not found in tabla ND. Assuming SEMIANNUAL periodicity (2).")
+                periodicity = 2
 
     dates = []
 
@@ -57,30 +62,18 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
         elif not pd.isna(prim_pago):
             dates.append(prim_pago)
     elif str(periodicity).strip().upper() == 'ND':
-        # Lookup in tabla ND
-        if df_tabla_nd is not None and not df_tabla_nd.empty:
-            nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
-            if not nd_rows.empty:
-                # Convert Excel serial dates or normal dates
-                try:
-                    # In excel, 40000 etc are serial dates
-                    # pd.to_datetime with unit 'D' and origin '1899-12-30' handles excel dates
-                    def parse_nd_date(d):
-                        if isinstance(d, (int, float)):
-                            return pd.to_datetime(d, unit='D', origin='1899-12-30')
-                        return pd.to_datetime(d, errors='coerce')
+        # Lookup in tabla ND (we know it exists because of the fallback above)
+        nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+        try:
+            def parse_nd_date(d):
+                if isinstance(d, (int, float)):
+                    return pd.to_datetime(d, unit='D', origin='1899-12-30')
+                return pd.to_datetime(d, errors='coerce')
 
-                    nd_dates = nd_rows['Vencimiento'].apply(parse_nd_date).dropna().tolist()
-                    dates.extend(nd_dates)
-                except Exception as e:
-                    logger.error(f"Credit {credito_id}: Error parsing ND dates: {e}")
-            else:
-                logger.warning(f"Credit {credito_id}: Type ND but not found in tabla ND. Assuming BULLET at ULT_PAGO.")
-                if not pd.isna(ult_pago):
-                    dates.append(ult_pago)
-        else:
-            if not pd.isna(ult_pago):
-                dates.append(ult_pago)
+            nd_dates = nd_rows['Vencimiento'].apply(parse_nd_date).dropna().tolist()
+            dates.extend(nd_dates)
+        except Exception as e:
+            logger.error(f"Credit {credito_id}: Error parsing ND dates: {e}")
     else:
         # Standard periodicities
         try:
