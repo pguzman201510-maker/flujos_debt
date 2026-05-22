@@ -99,10 +99,12 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
                 dates.append(current)
                 current += relativedelta(months=months_step)
 
-            # Ensure ult_pago is exactly included if it was slightly off,
-            # but usually it's exact in financial structures
+            # Ensure ult_pago is exactly included if it was slightly off
             if dates and dates[-1] < ult_pago:
-                 dates.append(ult_pago)
+                if dates[-1].year == ult_pago.year and dates[-1].month == ult_pago.month:
+                    pass # Ignore ult_pago if the scheduled date is already in the same month
+                else:
+                    dates.append(ult_pago)
 
     # Filter dates > cutoff_date strictly
     valid_dates = [d for d in dates if d > cutoff]
@@ -165,8 +167,13 @@ def generate_interest_calendar(combined_row, cutoff_date):
             dates.append(current)
             current += relativedelta(months=months_step)
 
-        if not dates or dates[-1] < end_date:
+        if not dates:
              dates.append(end_date)
+        elif dates[-1] < end_date:
+            if dates[-1].year == end_date.year and dates[-1].month == end_date.month:
+                pass # Ignore end_date if the scheduled date is already in the same month
+            else:
+                dates.append(end_date)
 
     valid_dates = [d for d in dates if d > cutoff]
     valid_dates.sort()
