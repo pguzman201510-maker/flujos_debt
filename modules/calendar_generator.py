@@ -129,8 +129,8 @@ def generate_interest_calendar(combined_row, cutoff_date):
     if combined_row is None or (isinstance(combined_row, (pd.DataFrame, pd.Series)) and combined_row.empty):
         return []
 
-    start_date = pd.to_datetime(combined_row.get('FECHA INICIAL INTERES'), errors='coerce')
-    end_date = pd.to_datetime(combined_row.get('FECHA FINAL INTERES'), errors='coerce')
+    start_date = pd.to_datetime(combined_row.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True)
+    end_date = pd.to_datetime(combined_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
     periodicity = str(combined_row.get('PERIODICIDAD PAGO INTERESES')).strip().upper()
     credito_id = combined_row.get('ID_CREDITO', 'Unknown')
 

@@ -64,7 +64,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             # Pick the active guide (FECHA FINAL INTERES >= CUTOFF_DATE)
             active_guias = []
             for _, g_row in guias_row.iterrows():
-                end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce')
+                end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
                 if not pd.isna(end_date) and end_date >= pd.to_datetime(CUTOFF_DATE):
                     active_guias.append(g_row)
             if active_guias:
@@ -132,6 +132,12 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
         from modules.calendar_generator import generate_interest_calendar
         interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE)
+
+        # Explicit alignment requested by user: If amortization dates exist, force interest dates to coincide
+        if dates and interest_dates and len(dates) == len(interest_dates):
+            interest_dates = dates.copy()
+        elif dates and not interest_dates:
+            interest_dates = dates.copy()
 
         # 6. Build Amortization
         df_amort_flow = build_amortization_flow(combined_row, dates, df_tabla_nd)

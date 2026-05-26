@@ -71,7 +71,7 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     months_step = 12 if p == 1 else (6 if p == 2 else (1 if p == 12 else (int(p) if p > 0 else 6)))
 
     # Start date of accrual
-    start_date = pd.to_datetime(row_guias.get('FECHA INICIAL INTERES')) if row_guias is not None else None
+    start_date = pd.to_datetime(row_guias.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True) if row_guias is not None else None
     if pd.isna(start_date):
         # Fallback to some date if missing
         start_date = interest_dates[0] - pd.DateOffset(months=months_step)
