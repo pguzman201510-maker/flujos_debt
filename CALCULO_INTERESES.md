@@ -1,0 +1,106 @@
+# Metodología de Cálculo de Intereses
+
+El motor de cálculo de intereses (`modules/interest_engine.py`) procesa el flujo de pagos futuros analizando la configuración de cada crédito (tasa fija o variable, fuente de fondeo, fechas y convenciones de días). A continuación se documenta el árbol de decisiones y las fórmulas matemáticas empleadas en el sistema.
+
+---
+
+## 1. Definición de la Tasa Base y Márgenes (`MARGEN VALOR`)
+
+El sistema utiliza una jerarquía para extraer el margen (o spread) con la mayor precisión decimal posible, evitando errores por redondeos de plataformas:
+1. **Prioridad 1:** Archivo `proy_inventario_perfil.xls` (columna `MARGEN VALOR`). Proporciona alta precisión.
+2. **Prioridad 2:** Archivo `proy_consulta_guias.xls`. Solo se utiliza si el inventario carece del dato o si literalmente indica la etiqueta `"GUIA"`.
+3. **Prioridad 3:** Archivo `Consulta oracle 30-04-2026.xls`. Usado como último recurso. Debido a que Oracle a veces guarda tasas en formatos inflados (ej. `4.8` en vez de `0.048`), el sistema aplica un factor de conversión `/100` inteligente si detecta que la cifra entera supera la unidad lógica.
+
+---
+
+## 2. Tipos de Tasa: Fija vs. Variable
+
+El cálculo base de la tasa anual (`base_annual_rate`) depende de la columna `CLASE_INT` reportada en Oracle:
+
+### 2.1 Tasas Fijas
+Se consideran **fijas** las clases que se encuentran dentro de las definiciones preestablecidas (configurable en `config/settings.py` como `FIXED_RATE_CODES`, por ejemplo: `FUFI`, `FIJA`, `SINI`, `FI19`).
+
+**Cálculo:**
+- La tasa base es estrictamente igual al `MARGEN VALOR` (ya expresado en decimales, ej: `0.041` = 4.1%).
+- `base_annual_rate = MARGEN VALOR`
+
+### 2.2 Tasas Variables e Indexadas (Forward)
+Para créditos no fijos (por ejemplo, aquellos anclados a `ISOR`, `LUS3`, etc.), la tasa fluctúa en el tiempo consultando el archivo `Tasas_forward.xlsx`.
+
+**Cálculo Estándar Variable:**
+1. Se localiza la tasa base (Forward) intersecando la fecha futura del pago contra el índice correspondiente (`CLASE_INT`).
+2. Se convierte el indicador a porcentaje numérico (`Forward / 100`).
+3. Se adiciona el `MARGEN VALOR` al resultado.
+- `base_annual_rate = (Forward / 100) + MARGEN VALOR`
+
+---
+
+## 3. Condiciones Especiales y Primas por Acreedor (`PMISTA`)
+
+Existen escenarios excepcionales condicionados por la columna `PMISTA`.
+
+### 3.1 Primas Escalonadas para `BIRF`
+Para los créditos donde el acreedor (`PMISTA`) es **`BIRF`**, la tasa base es reemplazada y se suman primas por plazo de vencimiento. La "maduración" del crédito en años se determina restando `PRIM_PAGO` a `ULT_PAGO`.
+
+* **Créditos `UBIR`:**
+  Se fuerza el uso del índice Forward **`TSO6`** y se suma un spread (premium) así:
+  * `< 7 años`: + 0.75% (`0.0075`)
+  * `Hasta 8 años`: + 1.05% (`0.0105`)
+  * `Hasta 12 años`: + 1.20% (`0.0120`)
+  * `Hasta 15 años`: + 1.35% (`0.0135`)
+  * `Hasta 18 años`: + 1.50% (`0.0150`)
+  * `Más de 18 años`: + 1.65% (`0.0165`)
+
+* **Créditos `EBIR`:**
+  Se fuerza el uso del índice Forward **`EUL6`** y se suma el siguiente premium:
+  * `< 7 años`: + 0.61% (`0.0061`)
+  * `Hasta 8 años`: + 0.71% (`0.0071`)
+  * `Hasta 12 años`: + 0.86% (`0.0086`)
+  * `Hasta 15 años`: + 1.01% (`0.0101`)
+  * `Hasta 18 años`: + 1.16% (`0.0116`)
+  * `Más de 18 años`: + 1.31% (`0.0131`)
+
+**Resultado BIRF:** `base_annual_rate = (Forward_Específico / 100) + Premium_Maturity + MARGEN VALOR`
+
+### 3.2 Margen Adicional para `BID`
+Para los créditos cuyo acreedor (`PMISTA`) es **`BID`** **y su tasa sea variable**, se adiciona un margen regulatorio (`MBID_RATE`, parametrizable en `config/settings.py`, por defecto `0.80%`).
+* `base_annual_rate = base_annual_rate + 0.0080`
+
+---
+
+## 4. Sensibilidad (Choques)
+
+Si el usuario ejecuta la herramienta en modo interactivo (`sensibilidad.py`), puede inyectar un escenario de estrés (`shock_int`). Este estrés es un sumatorio plano porcentual:
+* `base_annual_rate = base_annual_rate + (shock_int / 100)`
+
+*(Ejemplo: Un choque de `+1.5%` sumará `0.015` directo a la tasa nominal).*
+
+---
+
+## 5. Aplicación Final: Factor de Tiempo vs Frecuencia
+
+Para obtener el cobro real de la cuota (`pago_interes`), la tasa de interés anual debe convertirse en una tasa de periodo y multiplicarse por el capital.
+
+**La fórmula general es:  `Interés = Saldo Insoluto × Tasa × Factor`**
+
+Las reglas matemáticas para obtener este factor cambian según la naturaleza de la tasa:
+
+### A. Metodología para Tasas Variables (Frecuencia Directa)
+Por reglas de negocio directas, las tasas variables ignoran los cálculos convencionales de conteo de días calendario y basan el cobro en fracciones directas según la frecuencia de amortización estipulada en `proy_consulta_guias.xls`.
+* **Fórmula:** `Factor = 1.0 / Frecuencia`
+* *Ejemplo:* Si el pago es semestral (`Frecuencia = 2`), el `Factor` es `1.0 / 2 = 0.5`.
+* *Resultado:* `Pago Interés = Saldo Insoluto × base_annual_rate × 0.5`
+
+### B. Metodología para Tasas Fijas (Convenciones de Conteo de Días)
+Las tasas fijas aplican factores dinámicos evaluando los días calendario exactos transcurridos desde el pago anterior, empleando la convención especificada en la columna `METODO CONTEO` de guías:
+
+* **0: 30/360 (US)**: Estima meses de 30 días, limitando el día 31.
+* **1: 365/365 (Actual/365)**: Días calendario transcurridos divididos entre 365.
+* **2: Actual/360**: Días calendario reales divididos en un modelo contable de 360 días.
+* **3: Actual/365**: (Equivalente al #1) Días reales sobre 365.
+* **4: Actual/365 ajustado**: (Equivalente al #1).
+* **5: 30E/360 (Europeo)**: Estándar europeo para meses contables de 30 días, sin importar la interdependencia del día inicial.
+
+Para todos los métodos fijos el cálculo resultante es:
+* `Factor = Días_Del_Periodo / Base_Anual (360 o 365)`
+* *Resultado:* `Pago Interés = Saldo Insoluto × base_annual_rate × Factor`
