@@ -131,13 +131,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         # 5. Generate calendars
         dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
         from modules.calendar_generator import generate_interest_calendar
-        interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE)
-
-        # Explicit alignment requested by user: If amortization dates exist, force interest dates to coincide
-        if dates and interest_dates and len(dates) == len(interest_dates):
-            interest_dates = dates.copy()
-        elif dates and not interest_dates:
-            interest_dates = dates.copy()
+        interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE, amort_dates=dates)
 
         # 6. Build Amortization
         df_amort_flow = build_amortization_flow(combined_row, dates, df_tabla_nd)

@@ -114,11 +114,13 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
 
     return valid_dates
 
-def generate_interest_calendar(combined_row, cutoff_date):
+def generate_interest_calendar(combined_row, cutoff_date, amort_dates=None):
     """
     Generates a list of interest payment dates based on combined_row.
     combined_row: Must contain 'FECHA INICIAL INTERES', 'FECHA FINAL INTERES',
                   'PERIODICIDAD PAGO INTERESES', 'MES PERIODICIDAD'
+    amort_dates: Optional list of amortization dates. If provided, interest dates
+                 will natively align to their day/month combinations by stepping from them.
     """
     try:
         cutoff = pd.to_datetime(cutoff_date)
@@ -159,14 +161,32 @@ def generate_interest_calendar(combined_row, cutoff_date):
         valid_dates = [end_date] if end_date > cutoff else []
         return valid_dates
 
-    dates = []
+    dates_set = set()
     if months_step > 0:
-        current = start_date
-        # FECHA INICIAL INTERES is actually the first payment date
-        while current <= end_date:
-            dates.append(current)
-            current += relativedelta(months=months_step)
+        if amort_dates and len(amort_dates) > 0:
+            # Use the first amortization date as the alignment seed
+            seed = amort_dates[0]
 
+            # Step backwards to cover the period before amortization starts (down to start_date)
+            curr = seed
+            while curr >= start_date:
+                dates_set.add(curr)
+                curr -= relativedelta(months=months_step)
+
+            # Step forwards to cover the remaining period (up to end_date)
+            curr = seed
+            while curr <= end_date:
+                dates_set.add(curr)
+                curr += relativedelta(months=months_step)
+        else:
+            # Fallback if no amortization dates are available to sync to
+            curr = start_date
+            while curr <= end_date:
+                dates_set.add(curr)
+                curr += relativedelta(months=months_step)
+
+        # Handle appending the ultimate end_date if it wasn't perfectly reached
+        dates = sorted(list(dates_set))
         if not dates:
              dates.append(end_date)
         elif dates[-1] < end_date:
@@ -174,6 +194,8 @@ def generate_interest_calendar(combined_row, cutoff_date):
                 pass # Ignore end_date if the scheduled date is already in the same month
             else:
                 dates.append(end_date)
+    else:
+        dates = sorted(list(dates_set))
 
     valid_dates = [d for d in dates if d > cutoff]
     valid_dates.sort()
