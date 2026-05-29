@@ -61,9 +61,16 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     # Determine the step in months for fallback if start_date needs adjustment
     from dateutil.relativedelta import relativedelta
-    periodicity = str(row_guias.get('PERIODICIDAD PAGO INTERESES')).strip().upper() if row_guias is not None else '6'
-    if periodicity == 'GUIA':
-        periodicity = str(row_guias.get('MES PERIODICIDAD')).strip()
+
+    periodicity = '6'
+    if row_inv is not None and 'PERIODICIDAD PAGO INTERESES' in row_inv:
+        val_per = row_inv.get('PERIODICIDAD PAGO INTERESES')
+        if pd.notna(val_per) and str(val_per).strip() != '':
+            periodicity = str(val_per).strip().upper()
+
+    if periodicity == 'GUIA' and row_guias is not None:
+        periodicity = str(row_guias.get('MES PERIODICIDAD', '6')).strip()
+
     try:
         p = float(periodicity)
     except:
