@@ -20,23 +20,25 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         return pd.DataFrame()
 
     def get_active_guide(date):
-        if not isinstance(row_guias, pd.DataFrame):
+        if not isinstance(row_guias, pd.DataFrame) or row_guias.empty:
             return row_guias
 
         # Look for a guide where date falls between FECHA INICIAL INTERES and FECHA FINAL INTERES
-        # Convert to datetime carefully
-        for _, g_row in row_guias.iterrows():
-            sd = pd.to_datetime(g_row.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True)
-            ed = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
-            if not pd.isna(sd) and not pd.isna(ed):
-                if sd <= date <= ed:
-                    return g_row
+        # Using pre-converted columns from main.py
+        mask = (row_guias['FECHA INICIAL INTERES_DT'] <= date) & (date <= row_guias['FECHA FINAL INTERES_DT'])
+        active = row_guias[mask]
 
-        # Fallback to first guide or empty Series if none found
-        return row_guias.iloc[0]
+        if not active.empty:
+            return active.iloc[0]
 
-    # Use first guide for initial parameters
-    guide_rep = row_guias.iloc[0] if isinstance(row_guias, pd.DataFrame) else row_guias
+        # Fallback to the most recent guide if none found for this date
+        return row_guias.iloc[-1]
+
+    # Use representative guide for initial parameters
+    if isinstance(row_guias, pd.DataFrame) and not row_guias.empty:
+        guide_rep = row_guias.iloc[-1] # default to most recent
+    else:
+        guide_rep = row_guias
 
     metodo_conteo_rep = guide_rep.get('METODO CONTEO') if guide_rep is not None else None
 
@@ -178,32 +180,6 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         else:
             # Variable rate
             index_col = clase_int
-
-            if pmista == 'BIRF':
-                # Calculate maturity in years from PRIM_PAGO to ULT_PAGO
-                prim_pago = pd.to_datetime(row_oracle.get('PRIM_PAGO'), errors='coerce')
-                ult_pago = pd.to_datetime(row_oracle.get('ULT_PAGO'), errors='coerce')
-                years = 0.0
-                if not pd.isna(prim_pago) and not pd.isna(ult_pago) and ult_pago >= prim_pago:
-                    years = (ult_pago - prim_pago).days / 365.25
-
-                if clase_int == 'UBIR':
-                    index_col = 'TSO6'
-                    if years < 7: spread_premium = 0.0075
-                    elif years <= 8: spread_premium = 0.0105
-                    elif years <= 12: spread_premium = 0.0120
-                    elif years <= 15: spread_premium = 0.0135
-                    elif years <= 18: spread_premium = 0.0150
-                    else: spread_premium = 0.0165
-                elif clase_int == 'EBIR':
-                    index_col = 'EUL6'
-                    if years < 7: spread_premium = 0.0061
-                    elif years <= 8: spread_premium = 0.0071
-                    elif years <= 12: spread_premium = 0.0086
-                    elif years <= 15: spread_premium = 0.0101
-                    elif years <= 18: spread_premium = 0.0116
-                    else: spread_premium = 0.0131
-
             forward_val = get_forward_rate(df_tasas, index_col, current_date) / 100.0
             base_annual_rate = forward_val + spread_premium + margen
 

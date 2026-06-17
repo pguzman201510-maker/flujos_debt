@@ -39,6 +39,9 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         df_inventario = build_id(df_inventario, col_credito='CREDITO', col_tramo='TRAMO')
     if df_guias is not None:
         df_guias = build_id(df_guias, col_credito='CREDITO', col_tramo='TRAMO')
+        # Pre-convert dates for performance
+        df_guias['FECHA INICIAL INTERES_DT'] = pd.to_datetime(df_guias['FECHA INICIAL INTERES'], errors='coerce', dayfirst=True)
+        df_guias['FECHA FINAL INTERES_DT'] = pd.to_datetime(df_guias['FECHA FINAL INTERES'], errors='coerce', dayfirst=True)
 
     # Prepare merged lookups
     inventario_lookup = df_inventario.set_index('ID_CREDITO') if df_inventario is not None and 'ID_CREDITO' in df_inventario.columns else pd.DataFrame()
@@ -61,29 +64,29 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             inv_row = inv_row.iloc[0]
 
         guias_all = pd.DataFrame()
-        if isinstance(guias_row, pd.DataFrame):
+        if isinstance(guias_row, pd.DataFrame) and not guias_row.empty:
             guias_all = guias_row.copy()
             # Pick a representative active guide for initial metadata
-            active_list = []
-            for _, g_row in guias_row.iterrows():
-                end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
-                if not pd.isna(end_date) and end_date >= pd.to_datetime(CUTOFF_DATE):
-                    active_list.append(g_row)
+            # Filter active ones (end date >= cutoff)
+            active_df = guias_all[guias_all['FECHA FINAL INTERES_DT'] >= pd.to_datetime(CUTOFF_DATE)]
 
-            if active_list:
-                guias_row = active_list[0]
+            if not active_df.empty:
+                guias_row = active_df.iloc[0]
             else:
-                guias_row = guias_row.iloc[-1]
+                guias_row = guias_all.iloc[-1]
         elif isinstance(guias_row, pd.Series) and not guias_row.empty:
             guias_all = pd.DataFrame([guias_row])
+        else:
+            # Empty or None
+            guias_row = pd.Series()
+            guias_all = pd.DataFrame()
 
         # Combine into a single dict-like structure for easy access
         combined_row = {**row.to_dict(), **inv_row.to_dict(), **guias_row.to_dict()}
 
         # Update FECHA FINAL INTERES to be the maximum across all guides if multiple exist
         if not guias_all.empty:
-            all_end_dates = pd.to_datetime(guias_all['FECHA FINAL INTERES'], errors='coerce', dayfirst=True)
-            max_end = all_end_dates.max()
+            max_end = guias_all['FECHA FINAL INTERES_DT'].max()
             if not pd.isna(max_end):
                 combined_row['FECHA FINAL INTERES'] = max_end
 

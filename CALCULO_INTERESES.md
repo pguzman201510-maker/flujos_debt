@@ -39,30 +39,7 @@ Para créditos no fijos (por ejemplo, aquellos anclados a `ISOR`, `LUS3`, etc.),
 
 Existen escenarios excepcionales condicionados por la columna `PMISTA`.
 
-### 3.1 Primas Escalonadas para `BIRF`
-Para los créditos donde el acreedor (`PMISTA`) es **`BIRF`**, la tasa base es reemplazada y se suman primas por plazo de vencimiento. La "maduración" del crédito en años se determina restando `PRIM_PAGO` a `ULT_PAGO`.
-
-* **Créditos `UBIR`:**
-  Se fuerza el uso del índice Forward **`TSO6`** y se suma un spread (premium) así:
-  * `< 7 años`: + 0.75% (`0.0075`)
-  * `Hasta 8 años`: + 1.05% (`0.0105`)
-  * `Hasta 12 años`: + 1.20% (`0.0120`)
-  * `Hasta 15 años`: + 1.35% (`0.0135`)
-  * `Hasta 18 años`: + 1.50% (`0.0150`)
-  * `Más de 18 años`: + 1.65% (`0.0165`)
-
-* **Créditos `EBIR`:**
-  Se fuerza el uso del índice Forward **`EUL6`** y se suma el siguiente premium:
-  * `< 7 años`: + 0.61% (`0.0061`)
-  * `Hasta 8 años`: + 0.71% (`0.0071`)
-  * `Hasta 12 años`: + 0.86% (`0.0086`)
-  * `Hasta 15 años`: + 1.01% (`0.0101`)
-  * `Hasta 18 años`: + 1.16% (`0.0116`)
-  * `Más de 18 años`: + 1.31% (`0.0131`)
-
-**Resultado BIRF:** `base_annual_rate = (Forward_Específico / 100) + Premium_Maturity + MARGEN VALOR`
-
-### 3.2 Margen Adicional para `BID`
+### 3.1 Margen Adicional para `BID`
 Para los créditos cuyo acreedor (`PMISTA`) es **`BID`** **y su tasa sea variable**, se adiciona un margen regulatorio (`MBID_RATE`, parametrizable en `config/settings.py`, por defecto `0.80%`).
 * `base_annual_rate = base_annual_rate + 0.0080`
 
