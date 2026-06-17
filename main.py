@@ -60,21 +60,32 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         if isinstance(inv_row, pd.DataFrame):
             inv_row = inv_row.iloc[0]
 
+        guias_all = pd.DataFrame()
         if isinstance(guias_row, pd.DataFrame):
-            # Pick the active guide (FECHA FINAL INTERES >= CUTOFF_DATE)
-            active_guias = []
+            guias_all = guias_row.copy()
+            # Pick a representative active guide for initial metadata
+            active_list = []
             for _, g_row in guias_row.iterrows():
                 end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
                 if not pd.isna(end_date) and end_date >= pd.to_datetime(CUTOFF_DATE):
-                    active_guias.append(g_row)
-            if active_guias:
-                guias_row = active_guias[0]
+                    active_list.append(g_row)
+
+            if active_list:
+                guias_row = active_list[0]
             else:
                 guias_row = guias_row.iloc[-1]
+        elif isinstance(guias_row, pd.Series) and not guias_row.empty:
+            guias_all = pd.DataFrame([guias_row])
 
         # Combine into a single dict-like structure for easy access
         combined_row = {**row.to_dict(), **inv_row.to_dict(), **guias_row.to_dict()}
-        # For guias, we just pass the row to interest engine later
+
+        # Update FECHA FINAL INTERES to be the maximum across all guides if multiple exist
+        if not guias_all.empty:
+            all_end_dates = pd.to_datetime(guias_all['FECHA FINAL INTERES'], errors='coerce', dayfirst=True)
+            max_end = all_end_dates.max()
+            if not pd.isna(max_end):
+                combined_row['FECHA FINAL INTERES'] = max_end
 
         # --- SHOCK TC LOGIC ---
         if shock_tc != 0.0:
@@ -142,7 +153,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             df_amortization_flow=df_amort_flow,
             row_oracle=row,
             row_inv=inv_row,
-            row_guias=guias_row,
+            row_guias=guias_all if not guias_all.empty else guias_row,
             df_tasas=df_tasas,
             compute_day_count=compute_day_count,
             shock_int=shock_int
@@ -177,9 +188,13 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             df_combined['MDA_TR'] = row.get('MDA_TR')
             df_combined['PMISTA'] = row.get('PMISTA')
 
-            clase_int = str(row.get('CLASE_INT', '')).strip()
-            df_combined['CLASE_INT'] = clase_int
-            df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
+            if 'clase_int_periodo' in df_combined.columns:
+                df_combined['CLASE_INT'] = df_combined['clase_int_periodo']
+                df_combined['tipo_tasa'] = df_combined['CLASE_INT'].apply(lambda x: 'FIJA' if str(x).strip() in FIXED_RATE_CODES else 'VARIABLE')
+            else:
+                clase_int = str(row.get('CLASE_INT', '')).strip()
+                df_combined['CLASE_INT'] = clase_int
+                df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
             df_combined['metodo_conteo'] = guias_row.get('METODO CONTEO')
 
             # --- CONVERT TO LOCAL CURRENCY LOGIC ---

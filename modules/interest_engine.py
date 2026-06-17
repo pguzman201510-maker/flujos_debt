@@ -12,47 +12,33 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     df_amortization_flow: DataFrame containing 'fecha_operacion', 'saldo_insoluto'.
     row_oracle: contains CLASE_INT, MARGEN_VALOR, SDO_US
     row_inv: contains accurate unrounded MARGEN VALOR
-    row_guias: contains METODO CONTEO, FECHA INICIAL INTERES
+    row_guias: can be a Series or a DataFrame with columns METODO CONTEO, FECHA INICIAL INTERES, FECHA FINAL INTERES, TASA INTERES, MARGEN VALOR
     df_tasas: DataFrame for forward rates.
     compute_day_count: callable function compute_day_count(start_date, end_date, method) -> (days, factor)
     """
     if not interest_dates:
         return pd.DataFrame()
 
-    clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
+    def get_active_guide(date):
+        if not isinstance(row_guias, pd.DataFrame):
+            return row_guias
 
-    margen = 0.0
+        # Look for a guide where date falls between FECHA INICIAL INTERES and FECHA FINAL INTERES
+        # Convert to datetime carefully
+        for _, g_row in row_guias.iterrows():
+            sd = pd.to_datetime(g_row.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True)
+            ed = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
+            if not pd.isna(sd) and not pd.isna(ed):
+                if sd <= date <= ed:
+                    return g_row
 
-    # Try Inventario MARGEN VALOR first (high precision decimal)
-    val_inv = row_inv.get('MARGEN VALOR') if row_inv is not None else None
-    if not pd.isna(val_inv) and str(val_inv).strip() != '' and str(val_inv).strip().upper() != 'GUIA':
-        try:
-            margen = float(val_inv)
-        except:
-            pass
+        # Fallback to first guide or empty Series if none found
+        return row_guias.iloc[0]
 
-    # If GUIA or missing, try Guias MARGEN VALOR
-    if margen == 0.0 and row_guias is not None and 'MARGEN VALOR' in row_guias:
-        val_guias = row_guias.get('MARGEN VALOR')
-        if not pd.isna(val_guias) and str(val_guias).strip() != '':
-            try:
-                margen = float(val_guias)
-            except:
-                pass
+    # Use first guide for initial parameters
+    guide_rep = row_guias.iloc[0] if isinstance(row_guias, pd.DataFrame) else row_guias
 
-    # Fallback to Oracle
-    if margen == 0.0:
-        try:
-            val_or = row_oracle.get('MARGEN_VALOR', 0.0)
-            if not pd.isna(val_or) and str(val_or).strip() != '':
-                m = float(val_or)
-                # Oracle margin might be in percentages like 4.8 instead of 0.048
-                margen = m / 100.0 if m > 1 else m
-                margen = margen / 100.0 if margen > 0.5 else margen
-        except:
-            margen = 0.0
-
-    metodo_conteo = row_guias.get('METODO CONTEO') if row_guias is not None else None
+    metodo_conteo_rep = guide_rep.get('METODO CONTEO') if guide_rep is not None else None
 
     try:
         initial_balance = float(row_oracle.get('SDO_US', 0))
@@ -62,45 +48,45 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     # Determine the step in months for fallback if start_date needs adjustment
     from dateutil.relativedelta import relativedelta
 
-    periodicity = '6'
+    periodicity_rep = '6'
     if row_inv is not None and 'PERIODICIDAD PAGO INTERESES' in row_inv:
         val_per = row_inv.get('PERIODICIDAD PAGO INTERESES')
         if pd.notna(val_per) and str(val_per).strip() != '':
-            periodicity = str(val_per).strip().upper()
+            periodicity_rep = str(val_per).strip().upper()
 
-    if periodicity == 'GUIA' and row_guias is not None:
-        periodicity = str(row_guias.get('MES PERIODICIDAD', '6')).strip()
+    if periodicity_rep == 'GUIA' and guide_rep is not None:
+        periodicity_rep = str(guide_rep.get('MES PERIODICIDAD', '6')).strip()
 
     try:
-        p = float(periodicity)
+        p_rep = float(periodicity_rep)
     except:
-        p = 6
-    months_step = 12 if p == 1 else (6 if p == 2 else (1 if p == 12 else (int(p) if p > 0 else 6)))
+        p_rep = 6
+    months_step_rep = 12 if p_rep == 1 else (6 if p_rep == 2 else (1 if p_rep == 12 else (int(p_rep) if p_rep > 0 else 6)))
 
     # Start date of accrual
-    start_date = pd.to_datetime(row_guias.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True) if row_guias is not None else None
+    start_date = pd.to_datetime(guide_rep.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True) if guide_rep is not None else None
     if pd.isna(start_date):
         # Fallback to some date if missing
-        start_date = interest_dates[0] - pd.DateOffset(months=months_step)
+        start_date = interest_dates[0] - pd.DateOffset(months=months_step_rep)
 
     # If the first interest date in our list is far ahead of start_date (because earlier ones were filtered by cutoff)
     # the accrual should only be from the previous periodicity, not from the very beginning.
     # While start_date + N*periodicity < interest_dates[0]... advance it.
     first_payment = interest_dates[0]
     curr = start_date
-    while curr + relativedelta(months=months_step) <= first_payment:
+    while curr + relativedelta(months=months_step_rep) <= first_payment:
         # Don't advance if the exact step lands on first payment, we want accrual start to be strictly before
-        if curr + relativedelta(months=months_step) == first_payment:
-            curr += relativedelta(months=months_step)
+        if curr + relativedelta(months=months_step_rep) == first_payment:
+            curr += relativedelta(months=months_step_rep)
             break
-        curr += relativedelta(months=months_step)
+        curr += relativedelta(months=months_step_rep)
 
     # But we want the start of the accrual period FOR the first payment, which is one step before
     if curr == first_payment:
-        start_date = curr - relativedelta(months=months_step)
+        start_date = curr - relativedelta(months=months_step_rep)
     else:
         # In case it didn't align perfectly, just take the max of start_date or first_payment - step
-        inferred_start = first_payment - relativedelta(months=months_step)
+        inferred_start = first_payment - relativedelta(months=months_step_rep)
         start_date = max(start_date, inferred_start)
 
     # Helper to get outstanding balance AT a specific date
@@ -121,6 +107,63 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     current_start = start_date
     for current_date in interest_dates:
+        # Dynamic active guide lookup
+        active_guide = get_active_guide(current_date)
+
+        # 1. Determine Rate Type (clase_int)
+        # Prioritize TASA INTERES from Guide
+        clase_int = str(active_guide.get('TASA INTERES', '')).strip() if active_guide is not None else ''
+        if not clase_int or clase_int.upper() == 'NAN':
+            clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
+
+        # 2. Determine Margin
+        margen = 0.0
+        # Try Inventario MARGEN VALOR first (high precision decimal)
+        val_inv = row_inv.get('MARGEN VALOR') if row_inv is not None else None
+        if not pd.isna(val_inv) and str(val_inv).strip() != '' and str(val_inv).strip().upper() != 'GUIA':
+            try:
+                margen = float(val_inv)
+            except:
+                pass
+
+        # If GUIA or missing, try Guias MARGEN VALOR
+        if margen == 0.0 and active_guide is not None and 'MARGEN VALOR' in active_guide:
+            val_guias = active_guide.get('MARGEN VALOR')
+            if not pd.isna(val_guias) and str(val_guias).strip() != '':
+                try:
+                    margen = float(val_guias)
+                except:
+                    pass
+
+        # Fallback to Oracle
+        if margen == 0.0:
+            try:
+                val_or = row_oracle.get('MARGEN_VALOR', 0.0)
+                if not pd.isna(val_or) and str(val_or).strip() != '':
+                    m = float(val_or)
+                    # Oracle margin might be in percentages like 4.8 instead of 0.048
+                    margen = m / 100.0 if m > 1 else m
+                    margen = margen / 100.0 if margen > 0.5 else margen
+            except:
+                margen = 0.0
+
+        # 3. Determine Method/Periodicity
+        metodo_conteo = active_guide.get('METODO CONTEO') if active_guide is not None else metodo_conteo_rep
+
+        periodicity = '6'
+        if row_inv is not None and 'PERIODICIDAD PAGO INTERESES' in row_inv:
+            val_per = row_inv.get('PERIODICIDAD PAGO INTERESES')
+            if pd.notna(val_per) and str(val_per).strip() != '':
+                periodicity = str(val_per).strip().upper()
+
+        if periodicity == 'GUIA' and active_guide is not None:
+            periodicity = str(active_guide.get('MES PERIODICIDAD', '6')).strip()
+
+        try:
+            p = float(periodicity)
+        except:
+            p = 6
+
         # MBID/BIRF Specific Logic
         pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
 
@@ -193,7 +236,8 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         flow.append({
             'fecha_operacion': current_date,
             'pago_interes': max(0, interes),
-            'tasa_aplicada': rate
+            'tasa_aplicada': rate,
+            'clase_int_periodo': clase_int
         })
 
         # Advance
