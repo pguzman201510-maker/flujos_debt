@@ -169,6 +169,7 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         # MBID/BIRF Specific Logic
         pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
 
+        # Re-evaluate rate type based on dynamic clase_int
         is_fixed = clase_int in FIXED_RATE_CODES
 
         # Base annual rate components
@@ -203,17 +204,25 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
             # Fixed rates continue using standard Day Count Conventions
             _, factor = compute_day_count(current_start, current_date, metodo_conteo)
 
-        rate = base_annual_rate
-
         # Balance used is the balance at `current_start`
         balance = get_balance_at(current_start)
 
-        interes = balance * rate * factor
+        interes = balance * base_annual_rate * factor
+
+        # User requested tasa_aplicada to be the periodic rate for variable interests
+        # for easier verification against manual calculations
+        if not is_fixed:
+            applied_rate_report = base_annual_rate * factor
+        else:
+            applied_rate_report = base_annual_rate
+
         flow.append({
             'fecha_operacion': current_date,
             'pago_interes': max(0, interes),
-            'tasa_aplicada': rate,
-            'clase_int_periodo': clase_int
+            'tasa_aplicada': applied_rate_report,
+            'clase_int_periodo': clase_int,
+            'margen_aplicado': margen,
+            'valor_indice': forward_val
         })
 
         # Advance

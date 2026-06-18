@@ -184,6 +184,10 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
                 df_combined['pago_interes'] = df_combined['pago_interes'].fillna(0.0)
             if 'tasa_aplicada' not in df_combined.columns:
                 df_combined['tasa_aplicada'] = pd.NA
+            if 'margen_aplicado' not in df_combined.columns:
+                df_combined['margen_aplicado'] = pd.NA
+            if 'valor_indice' not in df_combined.columns:
+                df_combined['valor_indice'] = pd.NA
 
             # Attach basic info
             df_combined['ID_CREDITO'] = row.get('ID_CREDITO')

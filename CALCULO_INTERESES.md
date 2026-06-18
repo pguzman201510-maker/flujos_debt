@@ -45,7 +45,19 @@ Para los créditos cuyo acreedor (`PMISTA`) es **`BID`** **y su tasa sea variabl
 
 ---
 
-## 4. Sensibilidad (Choques)
+## 4. Columnas de Auditoría y Verificación
+
+Para facilitar la auditoría de los cálculos y permitir la validación manual contra herramientas externas (como Excel), el sistema exporta columnas adicionales:
+
+* **`valor_indice`**: El valor crudo extraído de `Tasas_forward.xlsx` (en decimal, ej: `0.0244`).
+* **`margen_aplicado`**: El `MARGEN VALOR` detectado para el periodo.
+* **`tasa_aplicada`**: Representa la tasa efectiva del periodo:
+  * Para **Tasas Variables**: Es la tasa de periodo (`base_annual_rate / Frecuencia`).
+  * Para **Tasas Fijas**: Es la tasa nominal anual (`base_annual_rate`).
+
+---
+
+## 5. Sensibilidad (Choques)
 
 Si el usuario ejecuta la herramienta en modo interactivo (`sensibilidad.py`), puede inyectar un escenario de estrés (`shock_int`). Este estrés es un sumatorio plano porcentual:
 * `base_annual_rate = base_annual_rate + (shock_int / 100)`
@@ -54,7 +66,7 @@ Si el usuario ejecuta la herramienta en modo interactivo (`sensibilidad.py`), pu
 
 ---
 
-## 5. Aplicación Final: Factor de Tiempo vs Frecuencia
+## 6. Aplicación Final: Factor de Tiempo vs Frecuencia
 
 Para obtener el cobro real de la cuota (`pago_interes`), la tasa de interés anual debe convertirse en una tasa de periodo y multiplicarse por el capital.
 
