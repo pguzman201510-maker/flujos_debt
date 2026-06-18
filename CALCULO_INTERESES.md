@@ -93,3 +93,19 @@ Las tasas fijas aplican factores dinámicos evaluando los días calendario exact
 Para todos los métodos fijos el cálculo resultante es:
 * `Factor = Días_Del_Periodo / Base_Anual (360 o 365)`
 * *Resultado:* `Pago Interés = Saldo Insoluto × base_annual_rate × Factor`
+
+---
+
+## 7. Jerarquía de Amortización y Manejo de Errores
+
+El motor de amortización (`modules/calendar_generator.py`) determina las fechas de pago siguiendo esta jerarquía:
+1. **Bullet Directo**: Si `FECHA PRIMER PAGO` es igual a `FECHA VENCIMIENTO`, o si faltan datos de periodicidad pero las fechas coinciden, se asume un pago único al final.
+2. **Tablas Irregulares (ND)**: Si el tipo es `ND` o si la celda está **vacía** (pero no es Bullet), se busca el `ID_CREDITO` en `tabla_nd.xlsx`.
+3. **Periodicidad Estándar**: Si no es irregular, se usan los códigos `1` (Anual), `2` (Semestral) o `12` (Mensual).
+4. **Fallback de Intereses**: Si la periodicidad de amortización está vacía, se intenta heredar la periodicidad de pago de intereses.
+
+### Reporte de Inconsistencias (`errores_proyeccion.txt`)
+El sistema genera automáticamente un archivo de texto con los créditos que presentaron problemas:
+* **FECHAS_INCORRECTAS**: Créditos donde la fecha de vencimiento es anterior a la de inicio.
+* **ND_NO_ENCONTRADO**: Créditos marcados como `ND` que no existen en la tabla auxiliar (se proyectan semestralmente por defecto).
+* **AMORTIZACION_VACIA_NO_BULLET**: Créditos sin tipo de amortización que no pudieron ser resueltos ni como Bullet ni vía `tabla_nd`.

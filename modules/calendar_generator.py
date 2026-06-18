@@ -10,12 +10,13 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     cutoff_date: pandas Timestamp or string (e.g. "2026-04-30")
     row: Must contain 'PRIM_PAGO', 'ULT_PAGO', 'TIPO AMORTIZACION', 'ID_CREDITO'
     df_tabla_nd: DataFrame with 'ID Crédito' and 'Vencimiento'
+    Returns (dates, error_type)
     """
     try:
         cutoff = pd.to_datetime(cutoff_date)
     except Exception as e:
         logger.error(f"Invalid cutoff_date: {e}")
-        return []
+        return [], None
 
     # Get basic dates
     prim_pago = pd.to_datetime(row.get('PRIM_PAGO'), errors='coerce')
@@ -23,34 +24,45 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     periodicity = row.get('TIPO AMORTIZACION')
     credito_id = row.get('ID_CREDITO')
 
+    error_type = None
+
     # Bullet check: missing dates, or ULT_PAGO <= PRIM_PAGO
     is_bullet = False
     if pd.isna(prim_pago) or pd.isna(ult_pago):
         is_bullet = True
-        logger.warning(f"Credit {credito_id}: Missing dates. Assuming BULLET.")
 
     if not is_bullet and ult_pago < prim_pago:
         is_bullet = True
-        logger.warning(f"Credit {credito_id}: ULT_PAGO ({ult_pago.date()}) < PRIM_PAGO ({prim_pago.date()}). Assuming BULLET.")
+        error_type = "FECHAS_INCORRECTAS" # ULT_PAGO < PRIM_PAGO
 
     if not is_bullet and prim_pago == ult_pago:
         is_bullet = True
 
+    p_str = str(periodicity).strip().upper()
+    is_empty_per = (p_str == 'NAN' or p_str == 'NONE' or p_str == '')
+
     # Fallback for empty periodicity when it's not a bullet
     if not is_bullet:
-        p_str = str(periodicity).strip().upper()
-        if p_str == 'NAN' or p_str == 'NONE' or p_str == '':
-            # Look at interest periodicity
-            int_per = str(row.get('PERIODICIDAD PAGO INTERESES', '')).strip().upper()
-            if int_per == 'GUIA':
-                periodicity = str(row.get('MES PERIODICIDAD', '')).strip()
-            elif int_per != 'NAN' and int_per != 'NONE' and int_per != '':
-                periodicity = int_per
+        if is_empty_per:
+            # New rule: if empty and not bullet, check tabla_nd first
+            if df_tabla_nd is not None and not df_tabla_nd.empty and (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
+                periodicity = 'ND'
+            else:
+                # Fallback to interest periodicity or report error
+                int_per = str(row.get('PERIODICIDAD PAGO INTERESES', '')).strip().upper()
+                if int_per == 'GUIA':
+                    periodicity = str(row.get('MES PERIODICIDAD', '')).strip()
+                elif int_per != 'NAN' and int_per != 'NONE' and int_per != '':
+                    periodicity = int_per
+
+                # If still empty or 0, it's an error
+                if str(periodicity).strip().upper() in ['NAN', 'NONE', '', '0']:
+                    error_type = "AMORTIZACION_VACIA_NO_BULLET"
         elif p_str == 'ND':
             # Fallback if ND is not found in tabla_nd
             if df_tabla_nd is None or df_tabla_nd.empty or not (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
-                logger.warning(f"Credit {credito_id}: Type ND but not found in tabla ND. Assuming SEMIANNUAL periodicity (2).")
-                periodicity = 2
+                error_type = "ND_NO_ENCONTRADO"
+                periodicity = 2 # Hard fallback to semiannual
 
     dates = []
 
@@ -112,7 +124,7 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     # Sort dates just in case
     valid_dates.sort()
 
-    return valid_dates
+    return valid_dates, error_type
 
 def generate_interest_calendar(combined_row, cutoff_date, amort_dates=None):
     """

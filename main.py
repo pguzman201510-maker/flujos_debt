@@ -48,7 +48,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
     guias_lookup = df_guias.set_index('ID_CREDITO') if df_guias is not None and 'ID_CREDITO' in df_guias.columns else pd.DataFrame()
 
     all_flows = []
-    missing_nd_credits = []
+    projection_errors = [] # List of (ID, ErrorType, Details)
 
     # Process each credit
     for _, row in df_oracle.iterrows():
@@ -135,15 +135,14 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         elif pd.isna(combined_row.get('ULT_PAGO')):
             pass # kept for logic completeness but handled above
 
-        # Track missing ND credits
-        periodicity = str(combined_row.get('TIPO AMORTIZACION', '')).strip().upper()
-        if periodicity == 'ND':
-            if df_tabla_nd is None or df_tabla_nd.empty or not (df_tabla_nd['ID Crédito'].astype(str) == str(cred_id)).any():
-                if cred_id not in missing_nd_credits:
-                    missing_nd_credits.append(cred_id)
-
         # 5. Generate calendars
-        dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
+        dates, err = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
+        if err:
+            projection_errors.append({
+                'ID_CREDITO': cred_id,
+                'ERROR': err,
+                'DETALLE': f"Prim Pago: {combined_row.get('PRIM_PAGO')}, Ult Pago: {combined_row.get('ULT_PAGO')}, Tipo Amort: {combined_row.get('TIPO AMORTIZACION')}"
+            })
         from modules.calendar_generator import generate_interest_calendar
         interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE, amort_dates=dates)
 
@@ -223,7 +222,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
 
             all_flows.append(df_combined)
 
-    return all_flows, missing_nd_credits
+    return all_flows, projection_errors
 
 def main():
     logger.info("Starting Flow Generator...")
@@ -243,22 +242,46 @@ def main():
     validate_data(df_oracle, df_inventario, df_guias)
 
     # Run core projection logic
-    all_flows, missing_nd_credits = run_projection(
+    all_flows, projection_errors = run_projection(
         df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas
     )
 
     # Export
     export_flow(all_flows, FILE_OUTPUT)
 
-    # Print missing ND Summary
-    if missing_nd_credits:
+    # Export errors to TXT
+    if projection_errors:
+        error_file = os.path.join(os.path.dirname(FILE_OUTPUT), "errores_proyeccion.txt")
+        try:
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write("INFORME DE ERRORES DE PROYECCIÓN\n")
+                f.write("="*60 + "\n\n")
+
+                # Categorize errors
+                categories = {
+                    "FECHAS_INCORRECTAS": "Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
+                    "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET y no se encontraron en TABLA_ND",
+                    "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)"
+                }
+
+                for cat_key, cat_name in categories.items():
+                    subset = [e for e in projection_errors if e['ERROR'] == cat_key]
+                    if subset:
+                        f.write(f"--- {cat_name} ---\n")
+                        for e in subset:
+                            f.write(f"ID: {e['ID_CREDITO']} | {e['DETALLE']}\n")
+                        f.write("\n")
+            logger.info(f"Reporte de errores generado en: {error_file}")
+        except Exception as e:
+            logger.error(f"No se pudo generar el reporte de errores: {e}")
+
+    # Print summary to console
+    if projection_errors:
         print("\n" + "="*50)
-        print("RESUMEN DE CRÉDITOS 'ND' NO ENCONTRADOS EN TABLA ND")
+        print("RESUMEN DE INCONSISTENCIAS ENCONTRADAS")
         print("="*50)
-        print("Los siguientes créditos tienen tipo de amortización 'ND',")
-        print("pero no se encontró su flujo de pago en 'tabla_nd.xlsx':\n")
-        for c in missing_nd_credits:
-            print(f" - {c}")
+        print(f"Se encontraron {len(projection_errors)} créditos con inconsistencias.")
+        print(f"Detalles exportados a: errores_proyeccion.txt")
         print("="*50 + "\n")
 
     logger.info("Processing complete.")
