@@ -31,3 +31,8 @@ ID: 5421001290001 | Prim Pago: 2025-08-15, Ult Pago: 2031-08-15, Tipo Amort: ND
 ID: 5411001120001 | Prim Pago: 2016-06-30, Ult Pago: 2035-09-13, Tipo Amort: ND
 ID: 5411000970002 | Prim Pago: 2022-03-31, Ult Pago: 2033-03-31, Tipo Amort: ND
 ID: 5421001280002 | Prim Pago: 2040-01-14, Ult Pago: 2040-01-15, Tipo Amort: ND
+
+--- Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código) ---
+ID: 5431000350002 | Prim Pago: 2026-07-17, Ult Pago: 2027-07-17, Tipo Amort: nan
+ID: 5431000430002 | Prim Pago: 2029-06-22, Ult Pago: 2029-12-22, Tipo Amort: nan
+ID: 5431000390002 | Prim Pago: 2027-10-29, Ult Pago: 2033-10-29, Tipo Amort: nan

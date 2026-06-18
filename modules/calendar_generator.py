@@ -45,7 +45,16 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     if not is_bullet:
         if is_empty_per:
             # New rule: if empty and not bullet, check tabla_nd first
-            if df_tabla_nd is not None and not df_tabla_nd.empty and (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
+            found_in_nd = False
+            if df_tabla_nd is not None and not df_tabla_nd.empty:
+                if (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
+                    found_in_nd = True
+                elif (df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))).any():
+                    # If tramo-specific ID not found, but base code exists, still count as found
+                    # but maybe log as a partial match if needed
+                    found_in_nd = True
+
+            if found_in_nd:
                 periodicity = 'ND'
             else:
                 # Fallback to interest periodicity or report error
@@ -76,6 +85,14 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     elif str(periodicity).strip().upper() == 'ND':
         # Lookup in tabla ND (we know it exists because of the fallback above)
         nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+
+        # If tramo-specific ID not found, check if there's data for the base code
+        if nd_rows.empty:
+            nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))]
+            if not nd_rows.empty:
+                 # If tramo-specific missing but code exists, report it but use code data
+                 error_type = "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE"
+
         try:
             def parse_nd_date(d):
                 if isinstance(d, (int, float)):

@@ -167,20 +167,33 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         elif not df_amort_flow.empty:
             df_combined = df_amort_flow.copy()
             df_combined['pago_interes'] = 0.0
-            df_combined['tasa_aplicada'] = pd.NA
         elif not df_interest_flow.empty:
             df_combined = df_interest_flow.copy()
             df_combined['pago_amortizacion'] = 0.0
-            df_combined['saldo_insoluto'] = pd.NA
         else:
             df_combined = pd.DataFrame()
 
         if not df_combined.empty:
-            # Fill NAs
+            # Fill NAs before grouping
             if 'pago_amortizacion' in df_combined.columns:
                 df_combined['pago_amortizacion'] = df_combined['pago_amortizacion'].fillna(0.0)
             if 'pago_interes' in df_combined.columns:
                 df_combined['pago_interes'] = df_combined['pago_interes'].fillna(0.0)
+
+            # Deduplicate by grouping same dates (e.g. if amort and interest fall on same day)
+            # Use max/first for categorical/stable columns and sum for amounts
+            agg_dict = {
+                'pago_amortizacion': 'sum',
+                'pago_interes': 'sum'
+            }
+            if 'tasa_aplicada' in df_combined.columns: agg_dict['tasa_aplicada'] = 'first'
+            if 'clase_int_periodo' in df_combined.columns: agg_dict['clase_int_periodo'] = 'first'
+            if 'margen_aplicado' in df_combined.columns: agg_dict['margen_aplicado'] = 'first'
+            if 'valor_indice' in df_combined.columns: agg_dict['valor_indice'] = 'first'
+            if 'saldo_insoluto' in df_combined.columns: agg_dict['saldo_insoluto'] = 'min' # Balance after payment
+
+            df_combined = df_combined.groupby('fecha_operacion', as_index=False).agg(agg_dict)
+
             if 'tasa_aplicada' not in df_combined.columns:
                 df_combined['tasa_aplicada'] = pd.NA
             if 'margen_aplicado' not in df_combined.columns:
@@ -261,7 +274,8 @@ def main():
                 categories = {
                     "FECHAS_INCORRECTAS": "Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
                     "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET y no se encontraron en TABLA_ND",
-                    "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)"
+                    "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
+                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": "Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código)"
                 }
 
                 for cat_key, cat_name in categories.items():

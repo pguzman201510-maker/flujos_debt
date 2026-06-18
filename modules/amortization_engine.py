@@ -27,6 +27,8 @@ def build_amortization_flow(row, dates, df_tabla_nd):
 
     if periodicity == 'ND' and df_tabla_nd is not None and not df_tabla_nd.empty:
         nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+        if nd_rows.empty:
+             nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))]
 
         # We need to map dates to percentages
         # Since tabla_nd has 'Vencimiento' and '% Real', let's map them
