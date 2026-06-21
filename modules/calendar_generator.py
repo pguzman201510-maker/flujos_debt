@@ -47,12 +47,22 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
             # New rule: if empty and not bullet, check tabla_nd first
             found_in_nd = False
             if df_tabla_nd is not None and not df_tabla_nd.empty:
+                # 1. Exact string match
                 if (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
                     found_in_nd = True
-                elif (df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))).any():
-                    # If tramo-specific ID not found, but base code exists, still count as found
-                    # but maybe log as a partial match if needed
-                    found_in_nd = True
+                # 2. Numeric match (handles scientific notation like 5.431E+12)
+                if not found_in_nd:
+                    try:
+                        target_num = float(credito_id)
+                        table_nums = pd.to_numeric(df_tabla_nd['ID Crédito'], errors='coerce')
+                        if (table_nums == target_num).any():
+                            found_in_nd = True
+                    except:
+                        pass
+                # 3. Base code match
+                if not found_in_nd:
+                    if (df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))).any():
+                        found_in_nd = True
 
             if found_in_nd:
                 periodicity = 'ND'
@@ -84,7 +94,16 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
             dates.append(prim_pago)
     elif str(periodicity).strip().upper() == 'ND':
         # Lookup in tabla ND (we know it exists because of the fallback above)
+        # Try multiple matching strategies for robustness
         nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+
+        if nd_rows.empty:
+            try:
+                target_num = float(credito_id)
+                table_nums = pd.to_numeric(df_tabla_nd['ID Crédito'], errors='coerce')
+                nd_rows = df_tabla_nd[table_nums == target_num]
+            except:
+                pass
 
         # If tramo-specific ID not found, check if there's data for the base code
         if nd_rows.empty:
