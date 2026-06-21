@@ -48,21 +48,31 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
             found_in_nd = False
             if df_tabla_nd is not None and not df_tabla_nd.empty:
                 # 1. Exact string match
-                if (df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)).any():
+                if (df_tabla_nd['ID Crédito'].astype(str).str.strip() == str(credito_id).strip()).any():
                     found_in_nd = True
                 # 2. Numeric match (handles scientific notation like 5.431E+12)
                 if not found_in_nd:
                     try:
                         target_num = float(credito_id)
                         table_nums = pd.to_numeric(df_tabla_nd['ID Crédito'], errors='coerce')
-                        if (table_nums == target_num).any():
+                        # Use a small epsilon for float comparison to handle precision issues
+                        if ( (table_nums - target_num).abs() < 1e-3 ).any():
                             found_in_nd = True
                     except:
                         pass
-                # 3. Base code match
+                # 3. Base code match (Código column)
                 if not found_in_nd:
-                    if (df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))).any():
+                    if (df_tabla_nd.iloc[:, 0].astype(str).str.strip() == str(row.get('COD_CREDITO')).strip()).any():
                         found_in_nd = True
+                    else:
+                        try:
+                            # Try numeric match for base code too
+                            target_code_num = float(row.get('COD_CREDITO'))
+                            table_code_nums = pd.to_numeric(df_tabla_nd.iloc[:, 0], errors='coerce')
+                            if ( (table_code_nums - target_code_num).abs() < 1e-3 ).any():
+                                found_in_nd = True
+                        except:
+                            pass
 
             if found_in_nd:
                 periodicity = 'ND'
@@ -95,19 +105,29 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     elif str(periodicity).strip().upper() == 'ND':
         # Lookup in tabla ND (we know it exists because of the fallback above)
         # Try multiple matching strategies for robustness
-        nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+        nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str).str.strip() == str(credito_id).strip()]
 
         if nd_rows.empty:
             try:
                 target_num = float(credito_id)
                 table_nums = pd.to_numeric(df_tabla_nd['ID Crédito'], errors='coerce')
-                nd_rows = df_tabla_nd[table_nums == target_num]
+                nd_rows = df_tabla_nd[ (table_nums - target_num).abs() < 1e-3 ]
             except:
                 pass
 
         # If tramo-specific ID not found, check if there's data for the base code
         if nd_rows.empty:
-            nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))]
+            target_code = str(row.get('COD_CREDITO')).strip()
+            nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str).str.strip() == target_code]
+
+            if nd_rows.empty:
+                try:
+                    target_code_num = float(target_code)
+                    table_code_nums = pd.to_numeric(df_tabla_nd.iloc[:, 0], errors='coerce')
+                    nd_rows = df_tabla_nd[ (table_code_nums - target_code_num).abs() < 1e-3 ]
+                except:
+                    pass
+
             if not nd_rows.empty:
                  # If tramo-specific missing but code exists, report it but use code data
                  error_type = "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE"

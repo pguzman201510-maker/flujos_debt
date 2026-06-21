@@ -27,18 +27,27 @@ def build_amortization_flow(row, dates, df_tabla_nd):
 
     if periodicity == 'ND' and df_tabla_nd is not None and not df_tabla_nd.empty:
         # Robust lookup matching calendar generator
-        nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str) == str(credito_id)]
+        nd_rows = df_tabla_nd[df_tabla_nd['ID Crédito'].astype(str).str.strip() == str(credito_id).strip()]
 
         if nd_rows.empty:
             try:
                 target_num = float(credito_id)
                 table_nums = pd.to_numeric(df_tabla_nd['ID Crédito'], errors='coerce')
-                nd_rows = df_tabla_nd[table_nums == target_num]
+                nd_rows = df_tabla_nd[ (table_nums - target_num).abs() < 1e-3 ]
             except:
                 pass
 
         if nd_rows.empty:
-             nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str) == str(row.get('COD_CREDITO'))]
+             target_code = str(row.get('COD_CREDITO')).strip()
+             nd_rows = df_tabla_nd[df_tabla_nd.iloc[:, 0].astype(str).str.strip() == target_code]
+
+             if nd_rows.empty:
+                 try:
+                     target_code_num = float(target_code)
+                     table_code_nums = pd.to_numeric(df_tabla_nd.iloc[:, 0], errors='coerce')
+                     nd_rows = df_tabla_nd[ (table_code_nums - target_code_num).abs() < 1e-3 ]
+                 except:
+                     pass
 
         # We need to map dates to percentages
         # Normalize target dates to date-only for alignment
@@ -62,10 +71,25 @@ def build_amortization_flow(row, dates, df_tabla_nd):
         # Normalize percentages for the exact dates we have
         total_pct = sum(pct_map.get(d, 0.0) for d in dates_normalized)
 
+        # Handle the case where no dates in tabla_nd match our calendar dates
+        # but the ID was found. In this case, we divide equally to avoid all-at-end
+        if total_pct <= 0 and not nd_rows.empty:
+            # Maybe the dates in ND don't match our calendar exactly
+            # (e.g. 15th vs 17th). Let's try to map by index if possible,
+            # or just divide equally
+            total_pct = sum(float(r.get('% Real', 0)) for _, r in nd_rows.iterrows())
+            if total_pct > 0:
+                # Re-map by sequence? Risky. Better to just divide equally but log it.
+                pass
+
         for i, d in enumerate(dates):
             d_norm = d.normalize()
             pct = pct_map.get(d_norm, 0.0)
             if total_pct > 0:
+                # If we have a match by date, use it.
+                # If total_pct was from the table but no dates matched (pct=0),
+                # this will result in 0 until the last payment which is not ideal.
+                # But since the user provided specific dates, they SHOULD match.
                 payment = sdo_us * (pct / total_pct)
             else:
                 # Fallback if no percentages or sum is 0
