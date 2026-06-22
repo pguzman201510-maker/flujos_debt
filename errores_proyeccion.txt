@@ -1,6 +1,13 @@
 INFORME DE ERRORES DE PROYECCIÓN
 ============================================================
 
+--- Créditos con TIPO AMORTIZACION vacío que no son BULLET ---
+ID: 5431000360001 | Prim Pago: 2030-06-06, Ult Pago: 2039-12-06, Tipo Amort: nan
+ID: 5431000460001 | Prim Pago: 2029-04-10, Ult Pago: 2030-10-10, Tipo Amort: nan
+ID: 5431000410002 | Prim Pago: 2028-07-11, Ult Pago: 2034-07-11, Tipo Amort: nan
+ID: 5431000400002 | Prim Pago: 2028-06-03, Ult Pago: 2034-06-03, Tipo Amort: nan
+ID: 5441000060001 | Prim Pago: 2028-11-15, Ult Pago: 2043-05-15, Tipo Amort: nan
+
 --- Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral) ---
 ID: 5411001240003 | Prim Pago: 2022-06-15, Ult Pago: 2033-06-15, Tipo Amort: ND
 ID: 5411001170002 | Prim Pago: 2022-08-16, Ult Pago: 2037-08-16, Tipo Amort: ND

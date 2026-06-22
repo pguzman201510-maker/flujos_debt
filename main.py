@@ -272,7 +272,7 @@ def main():
                 # Categorize errors
                 categories = {
                     "FECHAS_INCORRECTAS": "Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
-                    "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET y no se encontraron en TABLA_ND",
+                    "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET",
                     "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
                     "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": "Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código)",
                     "ALINEACION_FECHAS_INCORRECTA": "Créditos donde la FECHA VENCIMIENTO no coincide con el ciclo periódico (Semestral/Anual)"

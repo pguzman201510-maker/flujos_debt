@@ -44,6 +44,9 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
     # Fallback for empty periodicity when it's not a bullet
     if not is_bullet:
         if is_empty_per:
+            # Mark that it's empty and not bullet for the report
+            error_type = "AMORTIZACION_VACIA_NO_BULLET"
+
             # New rule: if empty and not bullet, check tabla_nd first
             found_in_nd = False
             if df_tabla_nd is not None and not df_tabla_nd.empty:
