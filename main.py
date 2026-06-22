@@ -122,11 +122,10 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
                 logger.debug(f"Failed to apply TC shock to {cred_id}: {e}")
         # -----------------------
 
-        # We might need to map empty dates from Guias as per requirements
-        if pd.isna(combined_row.get('PRIM_PAGO')):
-            # If dates missing, try to get from Guias or inventario (FECHA PRIMER PAGO)
-            if 'FECHA PRIMER PAGO' in combined_row and not pd.isna(combined_row['FECHA PRIMER PAGO']):
-                combined_row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
+        # Always prioritize FECHA PRIMER PAGO from Inventario/Guias for projection anchoring
+        if 'FECHA PRIMER PAGO' in combined_row and not pd.isna(combined_row['FECHA PRIMER PAGO']) and str(combined_row['FECHA PRIMER PAGO']).strip() != '':
+            combined_row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
+            row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
 
         # Override ULT_PAGO unconditionally from FECHA VENCIMIENTO
         if 'FECHA VENCIMIENTO' in combined_row and not pd.isna(combined_row['FECHA VENCIMIENTO']) and str(combined_row['FECHA VENCIMIENTO']).strip() != '':
@@ -275,7 +274,8 @@ def main():
                     "FECHAS_INCORRECTAS": "Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
                     "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET y no se encontraron en TABLA_ND",
                     "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
-                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": "Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código)"
+                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": "Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código)",
+                    "ALINEACION_FECHAS_INCORRECTA": "Créditos donde la FECHA VENCIMIENTO no coincide con el ciclo periódico (Semestral/Anual)"
                 }
 
                 for cat_key, cat_name in categories.items():

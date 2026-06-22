@@ -106,6 +106,8 @@ El motor de amortización (`modules/calendar_generator.py`) determina las fechas
 
 ### Reporte de Inconsistencias (`errores_proyeccion.txt`)
 El sistema genera automáticamente un archivo de texto con los créditos que presentaron problemas:
-* **FECHAS_INCORRECTAS**: Créditos donde la fecha de vencimiento es anterior a la de inicio.
+* **FECHAS_INCORRECTAS**: Créditos donde la fecha de vencimiento es anterior a la de inicio (`ULT_PAGO < PRIM_PAGO`).
 * **ND_NO_ENCONTRADO**: Créditos marcados como `ND` que no existen en la tabla auxiliar (se proyectan semestralmente por defecto).
+* **ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE**: Cuando el tramo específico no está en `tabla_nd` pero el código base sí.
 * **AMORTIZACION_VACIA_NO_BULLET**: Créditos sin tipo de amortización que no pudieron ser resueltos ni como Bullet ni vía `tabla_nd`.
+* **ALINEACION_FECHAS_INCORRECTA**: Créditos donde el ciclo periódico (ej. semestral) no aterriza exactamente en la fecha de vencimiento final.

@@ -167,11 +167,15 @@ def generate_calendar(row, df_tabla_nd, cutoff_date):
                 dates.append(current)
                 current += relativedelta(months=months_step)
 
-            # Ensure ult_pago is exactly included if it was slightly off
+            # Check for alignment: if the last scheduled date does not match ult_pago
+            # and it's not just a minor day-of-month shift (within same month)
             if dates and dates[-1] < ult_pago:
                 if dates[-1].year == ult_pago.year and dates[-1].month == ult_pago.month:
-                    pass # Ignore ult_pago if the scheduled date is already in the same month
+                    # Aligned enough (just month end or leap year stuff)
+                    pass
                 else:
+                    # NOT ALIGNED: The periodic schedule skips the final maturity date
+                    error_type = "ALINEACION_FECHAS_INCORRECTA"
                     dates.append(ult_pago)
 
     # Filter dates > cutoff_date strictly
