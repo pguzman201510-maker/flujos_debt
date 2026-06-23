@@ -28,6 +28,13 @@ Para iniciar el procesamiento y generar el flujo, abra una terminal en el direct
 python main.py
 ```
 
+### Herramienta de Auditoría (Buscador)
+Si desea auditar qué información exacta está tomando el sistema para un crédito específico, puede usar el buscador:
+```bash
+python inspect_credit.py <ID_CREDITO>
+# Ejemplo: python inspect_credit.py 5431000350002
+```
+
 ### ¿Qué hace el sistema durante la ejecución?
 1. **Lectura Segura:** Escanea los archivos `.xls`, intentando leerlos nativamente como delimitados (Maneja codificaciones especiales `latin-1`, `utf-8`).
 2. **Depuración:** Filtra únicamente aquellos créditos cuyo saldo `SDO_US` es mayor a 0.
