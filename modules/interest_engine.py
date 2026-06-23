@@ -15,9 +15,12 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     row_guias: can be a Series or a DataFrame with columns METODO CONTEO, FECHA INICIAL INTERES, FECHA FINAL INTERES, TASA INTERES, MARGEN VALOR
     df_tasas: DataFrame for forward rates.
     compute_day_count: callable function compute_day_count(start_date, end_date, method) -> (days, factor)
+    Returns (df_flow, list_of_errors)
     """
+    errors = []
+    cred_id = row_oracle.get('ID_CREDITO', 'Unknown')
     if not interest_dates:
-        return pd.DataFrame()
+        return pd.DataFrame(), []
 
     def get_active_guide(date):
         if not isinstance(row_guias, pd.DataFrame) or row_guias.empty:
@@ -112,6 +115,21 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         # Dynamic active guide lookup
         active_guide = get_active_guide(current_date)
 
+        # Validation: Gap in guide coverage
+        if isinstance(row_guias, pd.DataFrame) and not row_guias.empty:
+             mask = (row_guias['FECHA INICIAL INTERES_DT'] <= current_date) & (current_date <= row_guias['FECHA FINAL INTERES_DT'])
+             if not mask.any():
+                 errors.append({'ID_CREDITO': cred_id, 'ERROR': 'GAP_EN_GUIAS', 'DETALLE': f"No hay guía válida para la fecha {current_date.date()}"})
+
+        # Validation: End date discrepancy
+        ult_pago_amort = pd.to_datetime(row_oracle.get('ULT_PAGO'), errors='coerce')
+        if active_guide is not None and not pd.isna(ult_pago_amort):
+             final_guia = pd.to_datetime(active_guide.get('FECHA FINAL INTERES_DT'), errors='coerce')
+             if not pd.isna(final_guia) and final_guia < ult_pago_amort:
+                  # If we're at the last date or it's a structural gap
+                  if current_date == interest_dates[-1]:
+                      errors.append({'ID_CREDITO': cred_id, 'ERROR': 'GUIA_VENCE_ANTES_QUE_CAPITAL', 'DETALLE': f"Última guía vence el {final_guia.date()}, pero el capital vence el {ult_pago_amort.date()}"})
+
         # 1. Determine Rate Type (clase_int)
         # Prioritize TASA INTERES from Guide
         clase_int = str(active_guide.get('TASA INTERES', '')).strip() if active_guide is not None else ''
@@ -182,6 +200,13 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
             # Variable rate
             index_col = clase_int
             forward_val = get_forward_rate(df_tasas, index_col, current_date) / 100.0
+
+            # Validation: Missing Index
+            if forward_val == 0.0 and index_col not in ['SINI', 'FIJA', 'FUFI']:
+                # Check if it's actually in df_tasas
+                if df_tasas is not None and index_col not in df_tasas.columns:
+                     errors.append({'ID_CREDITO': cred_id, 'ERROR': 'INDICE_FALTANTE', 'DETALLE': f"El índice {index_col} no existe en Tasas_forward.xlsx"})
+
             base_annual_rate = forward_val + spread_premium + margen
 
         # Add Annual MBID margin (Only for variable rates per user instruction)
@@ -203,6 +228,10 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         else:
             # Fixed rates continue using standard Day Count Conventions
             _, factor = compute_day_count(current_start, current_date, metodo_conteo)
+
+        # Validation: Out of range rates
+        if base_annual_rate > 0.15 or base_annual_rate < 0:
+             errors.append({'ID_CREDITO': cred_id, 'ERROR': 'TASA_FUERA_DE_RANGO', 'DETALLE': f"Tasa anual calculada: {round(base_annual_rate*100, 2)}%"})
 
         # Balance used is the balance at `current_start`
         balance = get_balance_at(current_start)
@@ -228,4 +257,4 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         # Advance
         current_start = current_date
 
-    return pd.DataFrame(flow)
+    return pd.DataFrame(flow), errors

@@ -2,6 +2,8 @@ INFORME DE ERRORES DE PROYECCIÓN
 ============================================================
 
 --- Créditos con TIPO AMORTIZACION vacío que no son BULLET ---
+SOLUCIÓN: Definir tipo (1, 2, 12 o ND) en columna 'TIPO AMORTIZACION' de Inventario Perfil.
+-------------------------------------------------------------------------------------------
 ID: 5431000360001 | Prim Pago: 2030-06-06, Ult Pago: 2039-12-06, Tipo Amort: nan
 ID: 5431000460001 | Prim Pago: 2029-04-10, Ult Pago: 2030-10-10, Tipo Amort: nan
 ID: 5431000410002 | Prim Pago: 2028-07-11, Ult Pago: 2034-07-11, Tipo Amort: nan
@@ -9,6 +11,8 @@ ID: 5431000400002 | Prim Pago: 2028-06-03, Ult Pago: 2034-06-03, Tipo Amort: nan
 ID: 5441000060001 | Prim Pago: 2028-11-15, Ult Pago: 2043-05-15, Tipo Amort: nan
 
 --- Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral) ---
+SOLUCIÓN: Agregar la tabla de porcentajes para este ID en 'tabla_nd.xlsx'.
+--------------------------------------------------------------------------
 ID: 5411001240003 | Prim Pago: 2022-06-15, Ult Pago: 2033-06-15, Tipo Amort: ND
 ID: 5411001170002 | Prim Pago: 2022-08-16, Ult Pago: 2037-08-16, Tipo Amort: ND
 ID: 5411000980002 | Prim Pago: 2022-04-18, Ult Pago: 2033-04-18, Tipo Amort: ND
@@ -35,7 +39,25 @@ ID: 5421001290001 | Prim Pago: 2025-08-15, Ult Pago: 2031-08-15, Tipo Amort: ND
 ID: 5411001120001 | Prim Pago: 2013-03-13, Ult Pago: 2035-09-13, Tipo Amort: ND
 ID: 5411000970002 | Prim Pago: 2022-03-31, Ult Pago: 2033-03-31, Tipo Amort: ND
 
---- Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código) ---
+--- Créditos cuyo tramo no está en TABLA_ND pero el código base sí ---
+SOLUCIÓN: Verificar si el tramo debe tener la misma distribución que el código base en 'tabla_nd.xlsx'.
+-------------------------------------------------------------------------------------------------------
 ID: 5431000350002 | Prim Pago: 2026-07-17, Ult Pago: 2027-07-17, Tipo Amort: nan
 ID: 5431000430002 | Prim Pago: 2029-06-22, Ult Pago: 2029-12-22, Tipo Amort: nan
 ID: 5431000390002 | Prim Pago: 2027-10-29, Ult Pago: 2033-10-29, Tipo Amort: nan
+
+--- Créditos con saldo proyectable cero o negativo (ignorados) ---
+SOLUCIÓN: Revisar columna 'SDO_US' en archivo de consulta Oracle.
+-----------------------------------------------------------------
+ID: 541100176T1 | Saldo reportado: 0.0
+ID: 521100070T1 | Saldo reportado: 0.0
+ID: 542100141T1 | Saldo reportado: 0.0
+ID: 543100050T1 | Saldo reportado: 0.0
+ID: 542100131T1 | Saldo reportado: 0.0
+ID: 543100045T2 | Saldo reportado: 0.0
+ID: 543100045T1 | Saldo reportado: 0.0
+
+--- La última guía de interés vence antes que el capital ---
+SOLUCIÓN: Actualizar la 'FECHA FINAL INTERES' en la última guía para que cubra el vencimiento del capital.
+----------------------------------------------------------------------------------------------------------
+ID: 5431000420001 | Última guía vence el 2029-02-28, pero el capital vence el 2039-02-28

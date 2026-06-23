@@ -105,9 +105,16 @@ El motor de amortización (`modules/calendar_generator.py`) determina las fechas
 4. **Fallback de Intereses**: Si la periodicidad de amortización está vacía, se intenta heredar la periodicidad de pago de intereses.
 
 ### Reporte de Inconsistencias (`errores_proyeccion.txt`)
-El sistema genera automáticamente un archivo de texto con los créditos que presentaron problemas:
+El sistema genera automáticamente un archivo de texto con los créditos que presentaron problemas, incluyendo instrucciones de solución:
 * **FECHAS_INCORRECTAS**: Créditos donde la fecha de vencimiento es anterior a la de inicio (`ULT_PAGO < PRIM_PAGO`).
-* **ND_NO_ENCONTRADO**: Créditos marcados como `ND` que no existen en la tabla auxiliar (se proyectan semestralmente por defecto).
+* **ND_NO_ENCONTRADO**: Créditos marcados como `ND` que no existen en la tabla auxiliar.
 * **ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE**: Cuando el tramo específico no está en `tabla_nd` pero el código base sí.
-* **AMORTIZACION_VACIA_NO_BULLET**: Créditos sin tipo de amortización que no pudieron ser resueltos ni como Bullet ni vía `tabla_nd`.
-* **ALINEACION_FECHAS_INCORRECTA**: Créditos donde el ciclo periódico (ej. semestral) no aterriza exactamente en la fecha de vencimiento final.
+* **AMORTIZACION_VACIA_NO_BULLET**: Créditos sin tipo de amortización que no pudieron ser resueltos como Bullet.
+* **ALINEACION_FECHAS_INCORRECTA**: Créditos donde el ciclo periódico no aterriza exactamente en el vencimiento final.
+* **SALDO_CERO_O_NEGATIVO**: Créditos con saldo en USD reportado como cero o negativo (se omiten de la proyección).
+* **FALTA_EN_INVENTARIO**: Créditos reportados en Oracle que no existen en el archivo de Inventario Perfil.
+* **VENCIMIENTO_MUY_LEJANO**: Créditos con vencimientos superiores a 60 años (posibles errores de digitación).
+* **INDICE_FALTANTE**: Créditos de tasa variable cuyo índice no tiene proyecciones en `Tasas_forward.xlsx`.
+* **TASA_FUERA_DE_RANGO**: Periodos donde la tasa anual calculada es negativa o superior al 15%.
+* **GAP_EN_GUIAS**: Fechas de pago que no están cubiertas por ningún rango de fecha en las Guías de Interés.
+* **GUIA_VENCE_ANTES_QUE_CAPITAL**: Cuando la última guía definida vence antes que el capital del crédito.

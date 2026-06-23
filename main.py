@@ -149,7 +149,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         df_amort_flow = build_amortization_flow(combined_row, dates, df_tabla_nd)
 
         # 7. Build Interest
-        df_interest_flow = calculate_interest_flow(
+        df_interest_flow, int_errors = calculate_interest_flow(
             interest_dates=interest_dates,
             df_amortization_flow=df_amort_flow,
             row_oracle=row,
@@ -159,6 +159,8 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             compute_day_count=compute_day_count,
             shock_int=shock_int
         )
+        if int_errors:
+            projection_errors.extend(int_errors)
 
         # 8. Combine flows
         if not df_amort_flow.empty and not df_interest_flow.empty:
@@ -251,12 +253,14 @@ def main():
         return
 
     # Validations run once on original data
-    validate_data(df_oracle, df_inventario, df_guias)
+    initial_errors = validate_data(df_oracle, df_inventario, df_guias)
 
     # Run core projection logic
     all_flows, projection_errors = run_projection(
         df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas
     )
+
+    projection_errors = initial_errors + projection_errors
 
     # Export
     export_flow(all_flows, FILE_OUTPUT)
@@ -269,21 +273,58 @@ def main():
                 f.write("INFORME DE ERRORES DE PROYECCIÓN\n")
                 f.write("="*60 + "\n\n")
 
-                # Categorize errors
+                # Categorize errors and providing instructions
                 categories = {
-                    "FECHAS_INCORRECTAS": "Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
-                    "AMORTIZACION_VACIA_NO_BULLET": "Créditos con TIPO AMORTIZACION vacío que no son BULLET",
-                    "ND_NO_ENCONTRADO": "Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
-                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": "Créditos cuyo tramo específico no está en TABLA_ND pero su CÓDIGO base sí (se usó data del código)",
-                    "ALINEACION_FECHAS_INCORRECTA": "Créditos donde la FECHA VENCIMIENTO no coincide con el ciclo periódico (Semestral/Anual)"
+                    "FECHAS_INCORRECTAS": ("Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
+                                          "SOLUCIÓN: Revisar columnas 'PRIM_PAGO' y 'ULT_PAGO' en Oracle o 'FECHA PRIMER PAGO' y 'FECHA VENCIMIENTO' en Inventario."),
+
+                    "AMORTIZACION_VACIA_NO_BULLET": ("Créditos con TIPO AMORTIZACION vacío que no son BULLET",
+                                                    "SOLUCIÓN: Definir tipo (1, 2, 12 o ND) en columna 'TIPO AMORTIZACION' de Inventario Perfil."),
+
+                    "ND_NO_ENCONTRADO": ("Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
+                                        "SOLUCIÓN: Agregar la tabla de porcentajes para este ID en 'tabla_nd.xlsx'."),
+
+                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": ("Créditos cuyo tramo no está en TABLA_ND pero el código base sí",
+                                                            "SOLUCIÓN: Verificar si el tramo debe tener la misma distribución que el código base en 'tabla_nd.xlsx'."),
+
+                    "ALINEACION_FECHAS_INCORRECTA": ("Créditos donde el vencimiento no coincide con el ciclo periódico",
+                                                    "SOLUCIÓN: Ajustar la 'FECHA VENCIMIENTO' en Inventario o revisar la periodicidad."),
+
+                    "SALDO_CERO_O_NEGATIVO": ("Créditos con saldo proyectable cero o negativo (ignorados)",
+                                             "SOLUCIÓN: Revisar columna 'SDO_US' en archivo de consulta Oracle."),
+
+                    "FALTA_EN_INVENTARIO": ("Créditos en Oracle no encontrados en Inventario Perfil",
+                                           "SOLUCIÓN: Agregar el registro del crédito en el archivo 'proy_inventario_perfil.xls'."),
+
+                    "VENCIMIENTO_MUY_LEJANO": ("Créditos con vencimiento mayor a 60 años (posible error)",
+                                              "SOLUCIÓN: Verificar el año en la columna 'FECHA VENCIMIENTO' de Inventario."),
+
+                    "INDICE_FALTANTE": ("Índices de tasa variable no encontrados en archivo de tasas",
+                                       "SOLUCIÓN: Agregar columna con proyecciones para este índice en 'Tasas_forward.xlsx'."),
+
+                    "TASA_FUERA_DE_RANGO": ("Tasas anuales calculadas inusualmente altas (>15%) o negativas",
+                                           "SOLUCIÓN: Revisar el 'MARGEN VALOR' en Inventario o Guías para este periodo."),
+
+                    "GAP_EN_GUIAS": ("Fechas de pago sin cobertura de guías de interés",
+                                    "SOLUCIÓN: Ampliar los rangos de fecha o agregar filas en 'proy_consulta_guias.xls'."),
+
+                    "GUIA_VENCE_ANTES_QUE_CAPITAL": ("La última guía de interés vence antes que el capital",
+                                                    "SOLUCIÓN: Actualizar la 'FECHA FINAL INTERES' en la última guía para que cubra el vencimiento del capital.")
                 }
 
-                for cat_key, cat_name in categories.items():
+                for cat_key, cat_data in categories.items():
+                    cat_name, instruction = cat_data
                     subset = [e for e in projection_errors if e['ERROR'] == cat_key]
                     if subset:
                         f.write(f"--- {cat_name} ---\n")
+                        f.write(f"{instruction}\n")
+                        f.write("-" * len(instruction) + "\n")
+                        # Deduplicate IDs within same category
+                        seen_ids = set()
                         for e in subset:
-                            f.write(f"ID: {e['ID_CREDITO']} | {e['DETALLE']}\n")
+                            if e['ID_CREDITO'] not in seen_ids:
+                                f.write(f"ID: {e['ID_CREDITO']} | {e['DETALLE']}\n")
+                                seen_ids.add(e['ID_CREDITO'])
                         f.write("\n")
             logger.info(f"Reporte de errores generado en: {error_file}")
         except Exception as e:
