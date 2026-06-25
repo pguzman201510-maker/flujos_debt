@@ -18,11 +18,12 @@ from modules.exporter import export_flow
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=0.0, shock_int=0.0):
+def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=0.0, shock_int=0.0, shock_target='AMBAS'):
     """
     Runs the entire cash flow generation logic on the provided dataframes.
     shock_tc: Percentage shock to the implicit exchange rate (e.g. 5.0 for +5%).
     shock_int: Percentage shock to the interest rate (e.g. 1.0 for +1% flat).
+    shock_target: 'FIJA', 'VARIABLE', or 'AMBAS' (applies only to interest shock).
     Returns (all_flows, missing_nd_credits)
     """
     # Clone to avoid mutating original source data directly
@@ -157,7 +158,8 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             row_guias=guias_all if not guias_all.empty else guias_row,
             df_tasas=df_tasas,
             compute_day_count=compute_day_count,
-            shock_int=shock_int
+            shock_int=shock_int,
+            shock_target=shock_target
         )
         if int_errors:
             projection_errors.extend(int_errors)

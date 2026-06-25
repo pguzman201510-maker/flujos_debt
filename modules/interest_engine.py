@@ -5,7 +5,7 @@ from modules.forward_rates import get_forward_rate
 
 logger = logging.getLogger(__name__)
 
-def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_inv, row_guias, df_tasas, compute_day_count, shock_int=0.0):
+def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_inv, row_guias, df_tasas, compute_day_count, shock_int=0.0, shock_target='AMBAS'):
     """
     Computes interest payments for each period in the standalone interest flow.
     interest_dates: list of pd.Timestamp
@@ -15,6 +15,7 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     row_guias: can be a Series or a DataFrame with columns METODO CONTEO, FECHA INICIAL INTERES, FECHA FINAL INTERES, TASA INTERES, MARGEN VALOR
     df_tasas: DataFrame for forward rates.
     compute_day_count: callable function compute_day_count(start_date, end_date, method) -> (days, factor)
+    shock_target: 'FIJA', 'VARIABLE', or 'AMBAS'
     Returns (df_flow, list_of_errors)
     """
     errors = []
@@ -213,9 +214,15 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         if pmista == 'BID' and not is_fixed:
             base_annual_rate += MBID_RATE
 
-        # Add Annual shock
+        # Add Annual shock conditionally
         if shock_int != 0.0:
-            base_annual_rate += (shock_int / 100.0)
+            apply_shock = False
+            if shock_target == 'AMBAS': apply_shock = True
+            elif shock_target == 'FIJA' and is_fixed: apply_shock = True
+            elif shock_target == 'VARIABLE' and not is_fixed: apply_shock = True
+
+            if apply_shock:
+                base_annual_rate += (shock_int / 100.0)
 
         # Day count or Frequency division
         if current_start >= current_date:

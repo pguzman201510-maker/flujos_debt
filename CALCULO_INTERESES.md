@@ -59,10 +59,21 @@ Para facilitar la auditoría de los cálculos y permitir la validación manual c
 
 ## 5. Sensibilidad (Choques)
 
-Si el usuario ejecuta la herramienta en modo interactivo (`sensibilidad.py`), puede inyectar un escenario de estrés (`shock_int`). Este estrés es un sumatorio plano porcentual:
-* `base_annual_rate = base_annual_rate + (shock_int / 100)`
+La herramienta `sensibilidad.py` permite modelar escenarios de estrés sobre las tasas de interés y de cambio:
 
-*(Ejemplo: Un choque de `+1.5%` sumará `0.015` directo a la tasa nominal).*
+### 5.1 Choques de Interés Segmentados
+El usuario puede elegir aplicar el choque (`shock_int`) a:
+* **Solo Tasas Variables**: Afecta solo a créditos con clase de interés forward.
+* **Solo Tasas Fijas**: Afecta solo a créditos con clase de interés fija (FUFI, FIJA, etc.).
+* **Ambas**: Aplica el choque a todo el portafolio.
+
+Fórmula: `base_annual_rate = base_annual_rate + (shock_int / 100)`
+
+### 5.2 Choques de Tasa de Cambio (TC)
+El choque de TC altera el saldo proyectable (`SDO_US`) recalculando la equivalencia dólar basada en la moneda local (`SALDO_REAL`) con un factor de estrés porcentual.
+
+### 5.3 Reporte de Resumen
+El archivo `flujo_sensibilidad.xlsx` incluye una hoja de **Resumen** que compara el escenario Base vs. Shock, mostrando la sensibilidad en términos absolutos y en puntos porcentuales de impacto sobre el saldo total.
 
 ---
 
