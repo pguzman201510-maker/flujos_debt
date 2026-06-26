@@ -72,8 +72,11 @@ Fórmula: `base_annual_rate = base_annual_rate + (shock_int / 100)`
 ### 5.2 Choques de Tasa de Cambio (TC)
 El choque de TC altera el saldo proyectable (`SDO_US`) recalculando la equivalencia dólar basada en la moneda local (`SALDO_REAL`) con un factor de estrés porcentual.
 
-### 5.3 Reporte de Resumen
-El archivo `flujo_sensibilidad.xlsx` incluye una hoja de **Resumen** que compara el escenario Base vs. Shock, mostrando la sensibilidad en términos absolutos y en puntos porcentuales de impacto sobre el saldo total.
+### 5.3 Reporte de Resumen Granular
+El archivo `flujo_sensibilidad.xlsx` incluye una hoja de **Resumen** altamente detallada:
+*   **Segmentación por Tasa**: Desglosa el impacto del choque de interés para cada índice proyectado (ej. SOFR, EUL6, FIJA).
+*   **Segmentación por Moneda**: Muestra cómo el choque de TC afecta individualmente a cada moneda (COP, EUR, CHF, etc.) y calcula la tasa de cambio implícita resultante.
+*   **Métricas de Impacto**: Compara el escenario Base vs. Shock, calculando la sensibilidad en términos monetarios absolutos y en puntos porcentuales de variación sobre el agregado.
 
 ---
 
