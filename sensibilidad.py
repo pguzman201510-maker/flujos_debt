@@ -70,13 +70,13 @@ def run_sensibilidad():
     shock_int_total = df_shock['pago_interes'].sum()
 
     int_summary_list = [{
-        'Concepto': 'Choque Tasa Interés (TOTAL)',
-        'Shock %': f"{shock_int}%",
+        'tasa interes': 'Choque Tasa Interés (TOTAL)',
+        'shock %': f"{shock_int}%",
         'Destino': shock_target,
-        'Saldo Antes (Int)': base_int_total,
-        'Saldo Con Shock (Int)': shock_int_total,
-        'Sensibilidad (Dif)': shock_int_total - base_int_total,
-        'Sensibilidad % pts': ((shock_int_total / base_int_total) - 1) * 100 if base_int_total != 0 else 0
+        'saldo antes del shock': base_int_total,
+        'saldo con shock': shock_int_total,
+        'Sensibilidad (Diferencia)': shock_int_total - base_int_total,
+        'sensibilidad en puntos porcentuales': ((shock_int_total / base_int_total) - 1) * 100 if base_int_total != 0 else 0
     }]
 
     # Group by CLASE_INT
@@ -87,12 +87,12 @@ def run_sensibilidad():
             s_val = df_shock[df_shock['CLASE_INT'] == idx]['pago_interes'].sum()
             if b_val > 0 or s_val > 0:
                 int_summary_list.append({
-                    'Concepto': f"  > {idx}",
-                    'Shock %': "", 'Destino': "",
-                    'Saldo Antes (Int)': b_val,
-                    'Saldo Con Shock (Int)': s_val,
-                    'Sensibilidad (Dif)': s_val - b_val,
-                    'Sensibilidad % pts': ((s_val / b_val) - 1) * 100 if b_val != 0 else 0
+                    'tasa interes': f"  > {idx}",
+                    'shock %': "", 'Destino': "",
+                    'saldo antes del shock': b_val,
+                    'saldo con shock': s_val,
+                    'Sensibilidad (Diferencia)': s_val - b_val,
+                    'sensibilidad en puntos porcentuales': ((s_val / b_val) - 1) * 100 if b_val != 0 else 0
                 })
     resumen_interes = pd.DataFrame(int_summary_list)
 
@@ -101,13 +101,13 @@ def run_sensibilidad():
     shock_usd_total = df_shock['pago_amortizacion'].sum()
 
     tc_summary_list = [{
-        'Concepto': 'Choque Tasa Cambio (TOTAL)',
-        'Shock %': f"{shock_tc}%",
-        'Tasa Cambio Prom. Base': "",
-        'Tasa Cambio Prom. Shock': "",
+        'Concepto': 'Choque Tasa Cambio | tasa de cambio actual | tasa de cambio con choque',
+        'shock %': f"{shock_tc}%",
+        'tasa de cambio base': "",
+        'tasa de cambio con choque': "",
         'Saldo Antes (USD Total)': base_usd_total,
         'Saldo Con Shock (USD Total)': shock_usd_total,
-        'Sensibilidad (Dif USD)': shock_usd_total - base_usd_total,
+        'Sensibilidad (Diferencia USD)': shock_usd_total - base_usd_total,
         'Sensibilidad % pts': ((shock_usd_total / base_usd_total) - 1) * 100 if base_usd_total != 0 else 0
     }]
 
@@ -140,12 +140,12 @@ def run_sensibilidad():
             if b_usd > 0 or s_usd > 0:
                 tc_summary_list.append({
                     'Concepto': f"  > {m}",
-                    'Shock %': "",
-                    'Tasa Cambio Prom. Base': tc_base,
-                    'Tasa Cambio Prom. Shock': tc_shock,
+                    'shock %': "",
+                    'tasa de cambio base': tc_base,
+                    'tasa de cambio con choque': tc_shock,
                     'Saldo Antes (USD Total)': b_usd,
                     'Saldo Con Shock (USD Total)': s_usd,
-                    'Sensibilidad (Dif USD)': s_usd - b_usd,
+                    'Sensibilidad (Diferencia USD)': s_usd - b_usd,
                     'Sensibilidad % pts': ((s_usd / b_usd) - 1) * 100 if b_usd != 0 else 0
                 })
 
