@@ -1,27 +1,46 @@
 import pandas as pd
+import os
 from main import run_projection
 from modules.file_reader import read_file
-from modules.exporter import export_flow
 from config.settings import (
     FILE_ORACLE, FILE_INVENTARIO, FILE_GUIAS,
     FILE_TABLA_ND, FILE_TASAS
 )
 
 def run_sensibilidad():
-    print("=== HERRAMIENTA DE SENSIBILIDAD DE FLUJOS ===")
-    try:
-        shock_tc_input = input("Ingrese el choque a la Tasa de Cambio (en %, ej: 5 para +5%, -2 para -2%): ")
-        shock_tc = float(shock_tc_input) if shock_tc_input.strip() else 0.0
-    except ValueError:
-        print("Valor inválido. Se asumirá 0.0%")
-        shock_tc = 0.0
+    print("=== HERRAMIENTA DE SENSIBILIDAD AVANZADA ===")
 
-    try:
-        shock_int_input = input("Ingrese el choque a la Tasa de Interés (en %, ej: 1.5 para +1.5%, -1 para -1%): ")
-        shock_int = float(shock_int_input) if shock_int_input.strip() else 0.0
-    except ValueError:
-        print("Valor inválido. Se asumirá 0.0%")
-        shock_int = 0.0
+    # 1. Select Shocks to Apply
+    print("\n¿Qué choques desea aplicar?")
+    print("1. Solo Tasa de Cambio")
+    print("2. Solo Tasa de Interés")
+    print("3. Ambos")
+    choice = input("Seleccione (1-3): ").strip()
+
+    shock_tc = 0.0
+    shock_int = 0.0
+    shock_target = 'AMBAS'
+
+    if choice in ['1', '3']:
+        try:
+            shock_tc_input = input("Ingrese choque Tasa de Cambio (%): ")
+            shock_tc = float(shock_tc_input) if shock_tc_input.strip() else 0.0
+        except ValueError: pass
+
+    if choice in ['2', '3']:
+        try:
+            shock_int_input = input("Ingrese choque Tasa de Interés (%): ")
+            shock_int = float(shock_int_input) if shock_int_input.strip() else 0.0
+
+            print("\n¿A qué tasas aplicar el choque de interés?")
+            print("1. Solo Tasas Variables")
+            print("2. Solo Tasas Fijas")
+            print("3. Ambas")
+            target_choice = input("Seleccione (1-3): ").strip()
+            if target_choice == '1': shock_target = 'VARIABLE'
+            elif target_choice == '2': shock_target = 'FIJA'
+            else: shock_target = 'AMBAS'
+        except ValueError: pass
 
     print("\nLeyendo archivos de origen...")
     df_oracle = read_file(FILE_ORACLE)
@@ -39,32 +58,120 @@ def run_sensibilidad():
     df_base = pd.concat(base_flows, ignore_index=True) if base_flows else pd.DataFrame()
 
     print("Procesando Escenario SENSIBILIZADO...")
-    shock_flows, _ = run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=shock_tc, shock_int=shock_int)
+    shock_flows, _ = run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=shock_tc, shock_int=shock_int, shock_target=shock_target)
     df_shock = pd.concat(shock_flows, ignore_index=True) if shock_flows else pd.DataFrame()
 
-    # Sum totals
-    base_amort = df_base['pago_amortizacion'].sum() if not df_base.empty and 'pago_amortizacion' in df_base else 0.0
-    base_int = df_base['pago_interes'].sum() if not df_base.empty and 'pago_interes' in df_base else 0.0
+    if df_base.empty or df_shock.empty:
+        print("Error: No se generaron flujos para comparar.")
+        return
 
-    shock_amort = df_shock['pago_amortizacion'].sum() if not df_shock.empty and 'pago_amortizacion' in df_shock else 0.0
-    shock_int_val = df_shock['pago_interes'].sum() if not df_shock.empty and 'pago_interes' in df_shock else 0.0
+    # SUMMARY CALCULATIONS - INTERESTS (Granular)
+    base_int_total = df_base['pago_interes'].sum()
+    shock_int_total = df_shock['pago_interes'].sum()
 
-    print("\n" + "="*50)
-    print("RESULTADOS DE LA SENSIBILIDAD")
-    print("="*50)
-    print(f"Choque Tasa de Cambio aplicado : {shock_tc}%")
-    print(f"Choque Tasa de Interés aplicado: {shock_int}%")
-    print("-" * 50)
-    print(f"{'Concepto':<20} | {'BASE':<15} | {'SHOCK':<15} | {'DIFERENCIA':<15}")
-    print("-" * 50)
-    print(f"{'Total Amortización':<20} | {base_amort:15,.2f} | {shock_amort:15,.2f} | {shock_amort - base_amort:15,.2f}")
-    print(f"{'Total Intereses':<20} | {base_int:15,.2f} | {shock_int_val:15,.2f} | {shock_int_val - base_int:15,.2f}")
-    print("="*50)
+    int_summary_list = [{
+        'tasa interes': 'Choque Tasa Interés (TOTAL)',
+        'shock %': f"{shock_int}%",
+        'Destino': shock_target,
+        'saldo antes del shock': base_int_total,
+        'saldo con shock': shock_int_total,
+        'Sensibilidad (Diferencia)': shock_int_total - base_int_total,
+        'sensibilidad en puntos porcentuales': ((shock_int_total / base_int_total) - 1) * 100 if base_int_total != 0 else 0
+    }]
 
-    # Export shocked flow
+    # Group by CLASE_INT
+    if 'CLASE_INT' in df_base.columns:
+        indices = df_base['CLASE_INT'].unique()
+        for idx in indices:
+            b_val = df_base[df_base['CLASE_INT'] == idx]['pago_interes'].sum()
+            s_val = df_shock[df_shock['CLASE_INT'] == idx]['pago_interes'].sum()
+            if b_val > 0 or s_val > 0:
+                int_summary_list.append({
+                    'tasa interes': f"  > {idx}",
+                    'shock %': "", 'Destino': "",
+                    'saldo antes del shock': b_val,
+                    'saldo con shock': s_val,
+                    'Sensibilidad (Diferencia)': s_val - b_val,
+                    'sensibilidad en puntos porcentuales': ((s_val / b_val) - 1) * 100 if b_val != 0 else 0
+                })
+    resumen_interes = pd.DataFrame(int_summary_list)
+
+    # SUMMARY CALCULATIONS - EXCHANGE RATE (Granular)
+    base_usd_total = df_base['pago_amortizacion'].sum()
+    shock_usd_total = df_shock['pago_amortizacion'].sum()
+
+    tc_summary_list = [{
+        'Concepto': 'Choque Tasa Cambio | tasa de cambio actual | tasa de cambio con choque',
+        'shock %': f"{shock_tc}%",
+        'tasa de cambio base': "",
+        'tasa de cambio con choque': "",
+        'Saldo Antes (USD Total)': base_usd_total,
+        'Saldo Con Shock (USD Total)': shock_usd_total,
+        'Sensibilidad (Diferencia USD)': shock_usd_total - base_usd_total,
+        'Sensibilidad % pts': ((shock_usd_total / base_usd_total) - 1) * 100 if base_usd_total != 0 else 0
+    }]
+
+    # Group by Currency (MDA_TR)
+    if 'MDA_TR' in df_base.columns:
+        mda_list = df_base['MDA_TR'].unique()
+        for m in mda_list:
+            b_usd = df_base[df_base['MDA_TR'] == m]['pago_amortizacion'].sum()
+            s_usd = df_shock[df_shock['MDA_TR'] == m]['pago_amortizacion'].sum()
+
+            # Calculate implicit exchange rate for this currency
+            # We look at the first row of this currency in both DFs
+            try:
+                # In our model, conv_factor = saldo_real / sdo_us
+                # base_tc = conv_factor
+                b_row = df_base[df_base['MDA_TR'] == m].iloc[0]
+                s_row = df_shock[df_shock['MDA_TR'] == m].iloc[0]
+
+                # Check if it has real currency columns
+                if 'amort_mda_real' in b_row and b_row['pago_amortizacion'] > 0:
+                    tc_base = b_row['amort_mda_real'] / b_row['pago_amortizacion']
+                    tc_shock = s_row['amort_mda_real'] / s_row['pago_amortizacion']
+                else:
+                    tc_base = 1.0
+                    tc_shock = 1.0
+            except:
+                tc_base = 0.0
+                tc_shock = 0.0
+
+            if b_usd > 0 or s_usd > 0:
+                tc_summary_list.append({
+                    'Concepto': f"  > {m}",
+                    'shock %': "",
+                    'tasa de cambio base': tc_base,
+                    'tasa de cambio con choque': tc_shock,
+                    'Saldo Antes (USD Total)': b_usd,
+                    'Saldo Con Shock (USD Total)': s_usd,
+                    'Sensibilidad (Diferencia USD)': s_usd - b_usd,
+                    'Sensibilidad % pts': ((s_usd / b_usd) - 1) * 100 if b_usd != 0 else 0
+                })
+
+    resumen_tc = pd.DataFrame(tc_summary_list)
+
+    # EXPORT
     output_file = "flujo_sensibilidad.xlsx"
-    export_flow(shock_flows, output_file)
-    print(f"\nFlujo sensibilizado exportado exitosamente a: {output_file}")
+    try:
+        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+            df_shock.to_excel(writer, sheet_name='Flujo_Sensibilizado', index=False)
+
+            # Write Resumen Sheet
+            resumen_interes.to_excel(writer, sheet_name='Resumen_Sensibilidad', startrow=1, index=False)
+
+            # Calculate dynamic start for TC summary
+            tc_start = len(resumen_interes) + 4
+            resumen_tc.to_excel(writer, sheet_name='Resumen_Sensibilidad', startrow=tc_start, index=False)
+
+            # Format Resumen sheet slightly
+            ws = writer.sheets['Resumen_Sensibilidad']
+            ws['A1'] = "RESUMEN DE SENSIBILIDAD - INTERESES"
+            ws[f'A{tc_start}'] = "RESUMEN DE SENSIBILIDAD - TASA DE CAMBIO"
+
+        print(f"\nProceso exitoso. Resultados en: {output_file}")
+    except Exception as e:
+        print(f"Error al exportar Excel: {e}")
 
 if __name__ == '__main__':
     run_sensibilidad()

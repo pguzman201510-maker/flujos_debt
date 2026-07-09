@@ -18,11 +18,12 @@ from modules.exporter import export_flow
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
 
-def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=0.0, shock_int=0.0):
+def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, shock_tc=0.0, shock_int=0.0, shock_target='AMBAS'):
     """
     Runs the entire cash flow generation logic on the provided dataframes.
     shock_tc: Percentage shock to the implicit exchange rate (e.g. 5.0 for +5%).
     shock_int: Percentage shock to the interest rate (e.g. 1.0 for +1% flat).
+    shock_target: 'FIJA', 'VARIABLE', or 'AMBAS' (applies only to interest shock).
     Returns (all_flows, missing_nd_credits)
     """
     # Clone to avoid mutating original source data directly
@@ -39,13 +40,16 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         df_inventario = build_id(df_inventario, col_credito='CREDITO', col_tramo='TRAMO')
     if df_guias is not None:
         df_guias = build_id(df_guias, col_credito='CREDITO', col_tramo='TRAMO')
+        # Pre-convert dates for performance
+        df_guias['FECHA INICIAL INTERES_DT'] = pd.to_datetime(df_guias['FECHA INICIAL INTERES'], errors='coerce', dayfirst=True)
+        df_guias['FECHA FINAL INTERES_DT'] = pd.to_datetime(df_guias['FECHA FINAL INTERES'], errors='coerce', dayfirst=True)
 
     # Prepare merged lookups
     inventario_lookup = df_inventario.set_index('ID_CREDITO') if df_inventario is not None and 'ID_CREDITO' in df_inventario.columns else pd.DataFrame()
     guias_lookup = df_guias.set_index('ID_CREDITO') if df_guias is not None and 'ID_CREDITO' in df_guias.columns else pd.DataFrame()
 
     all_flows = []
-    missing_nd_credits = []
+    projection_errors = [] # List of (ID, ErrorType, Details)
 
     # Process each credit
     for _, row in df_oracle.iterrows():
@@ -60,21 +64,32 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         if isinstance(inv_row, pd.DataFrame):
             inv_row = inv_row.iloc[0]
 
-        if isinstance(guias_row, pd.DataFrame):
-            # Pick the active guide (FECHA FINAL INTERES >= CUTOFF_DATE)
-            active_guias = []
-            for _, g_row in guias_row.iterrows():
-                end_date = pd.to_datetime(g_row.get('FECHA FINAL INTERES'), errors='coerce', dayfirst=True)
-                if not pd.isna(end_date) and end_date >= pd.to_datetime(CUTOFF_DATE):
-                    active_guias.append(g_row)
-            if active_guias:
-                guias_row = active_guias[0]
+        guias_all = pd.DataFrame()
+        if isinstance(guias_row, pd.DataFrame) and not guias_row.empty:
+            guias_all = guias_row.copy()
+            # Pick a representative active guide for initial metadata
+            # Filter active ones (end date >= cutoff)
+            active_df = guias_all[guias_all['FECHA FINAL INTERES_DT'] >= pd.to_datetime(CUTOFF_DATE)]
+
+            if not active_df.empty:
+                guias_row = active_df.iloc[0]
             else:
-                guias_row = guias_row.iloc[-1]
+                guias_row = guias_all.iloc[-1]
+        elif isinstance(guias_row, pd.Series) and not guias_row.empty:
+            guias_all = pd.DataFrame([guias_row])
+        else:
+            # Empty or None
+            guias_row = pd.Series()
+            guias_all = pd.DataFrame()
 
         # Combine into a single dict-like structure for easy access
         combined_row = {**row.to_dict(), **inv_row.to_dict(), **guias_row.to_dict()}
-        # For guias, we just pass the row to interest engine later
+
+        # Update FECHA FINAL INTERES to be the maximum across all guides if multiple exist
+        if not guias_all.empty:
+            max_end = guias_all['FECHA FINAL INTERES_DT'].max()
+            if not pd.isna(max_end):
+                combined_row['FECHA FINAL INTERES'] = max_end
 
         # --- SHOCK TC LOGIC ---
         if shock_tc != 0.0:
@@ -108,11 +123,10 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
                 logger.debug(f"Failed to apply TC shock to {cred_id}: {e}")
         # -----------------------
 
-        # We might need to map empty dates from Guias as per requirements
-        if pd.isna(combined_row.get('PRIM_PAGO')):
-            # If dates missing, try to get from Guias or inventario (FECHA PRIMER PAGO)
-            if 'FECHA PRIMER PAGO' in combined_row and not pd.isna(combined_row['FECHA PRIMER PAGO']):
-                combined_row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
+        # Always prioritize FECHA PRIMER PAGO from Inventario/Guias for projection anchoring
+        if 'FECHA PRIMER PAGO' in combined_row and not pd.isna(combined_row['FECHA PRIMER PAGO']) and str(combined_row['FECHA PRIMER PAGO']).strip() != '':
+            combined_row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
+            row['PRIM_PAGO'] = combined_row['FECHA PRIMER PAGO']
 
         # Override ULT_PAGO unconditionally from FECHA VENCIMIENTO
         if 'FECHA VENCIMIENTO' in combined_row and not pd.isna(combined_row['FECHA VENCIMIENTO']) and str(combined_row['FECHA VENCIMIENTO']).strip() != '':
@@ -121,15 +135,14 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         elif pd.isna(combined_row.get('ULT_PAGO')):
             pass # kept for logic completeness but handled above
 
-        # Track missing ND credits
-        periodicity = str(combined_row.get('TIPO AMORTIZACION', '')).strip().upper()
-        if periodicity == 'ND':
-            if df_tabla_nd is None or df_tabla_nd.empty or not (df_tabla_nd['ID Crédito'].astype(str) == str(cred_id)).any():
-                if cred_id not in missing_nd_credits:
-                    missing_nd_credits.append(cred_id)
-
         # 5. Generate calendars
-        dates = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
+        dates, err = generate_calendar(combined_row, df_tabla_nd, CUTOFF_DATE)
+        if err:
+            projection_errors.append({
+                'ID_CREDITO': cred_id,
+                'ERROR': err,
+                'DETALLE': f"Prim Pago: {combined_row.get('PRIM_PAGO')}, Ult Pago: {combined_row.get('ULT_PAGO')}, Tipo Amort: {combined_row.get('TIPO AMORTIZACION')}"
+            })
         from modules.calendar_generator import generate_interest_calendar
         interest_dates = generate_interest_calendar(combined_row, CUTOFF_DATE, amort_dates=dates)
 
@@ -137,16 +150,19 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         df_amort_flow = build_amortization_flow(combined_row, dates, df_tabla_nd)
 
         # 7. Build Interest
-        df_interest_flow = calculate_interest_flow(
+        df_interest_flow, int_errors = calculate_interest_flow(
             interest_dates=interest_dates,
             df_amortization_flow=df_amort_flow,
             row_oracle=row,
             row_inv=inv_row,
-            row_guias=guias_row,
+            row_guias=guias_all if not guias_all.empty else guias_row,
             df_tasas=df_tasas,
             compute_day_count=compute_day_count,
-            shock_int=shock_int
+            shock_int=shock_int,
+            shock_target=shock_target
         )
+        if int_errors:
+            projection_errors.extend(int_errors)
 
         # 8. Combine flows
         if not df_amort_flow.empty and not df_interest_flow.empty:
@@ -154,22 +170,39 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
         elif not df_amort_flow.empty:
             df_combined = df_amort_flow.copy()
             df_combined['pago_interes'] = 0.0
-            df_combined['tasa_aplicada'] = pd.NA
         elif not df_interest_flow.empty:
             df_combined = df_interest_flow.copy()
             df_combined['pago_amortizacion'] = 0.0
-            df_combined['saldo_insoluto'] = pd.NA
         else:
             df_combined = pd.DataFrame()
 
         if not df_combined.empty:
-            # Fill NAs
+            # Fill NAs before grouping
             if 'pago_amortizacion' in df_combined.columns:
                 df_combined['pago_amortizacion'] = df_combined['pago_amortizacion'].fillna(0.0)
             if 'pago_interes' in df_combined.columns:
                 df_combined['pago_interes'] = df_combined['pago_interes'].fillna(0.0)
+
+            # Deduplicate by grouping same dates (e.g. if amort and interest fall on same day)
+            # Use max/first for categorical/stable columns and sum for amounts
+            agg_dict = {
+                'pago_amortizacion': 'sum',
+                'pago_interes': 'sum'
+            }
+            if 'tasa_aplicada' in df_combined.columns: agg_dict['tasa_aplicada'] = 'first'
+            if 'clase_int_periodo' in df_combined.columns: agg_dict['clase_int_periodo'] = 'first'
+            if 'margen_aplicado' in df_combined.columns: agg_dict['margen_aplicado'] = 'first'
+            if 'valor_indice' in df_combined.columns: agg_dict['valor_indice'] = 'first'
+            if 'saldo_insoluto' in df_combined.columns: agg_dict['saldo_insoluto'] = 'min' # Balance after payment
+
+            df_combined = df_combined.groupby('fecha_operacion', as_index=False).agg(agg_dict)
+
             if 'tasa_aplicada' not in df_combined.columns:
                 df_combined['tasa_aplicada'] = pd.NA
+            if 'margen_aplicado' not in df_combined.columns:
+                df_combined['margen_aplicado'] = pd.NA
+            if 'valor_indice' not in df_combined.columns:
+                df_combined['valor_indice'] = pd.NA
 
             # Attach basic info
             df_combined['ID_CREDITO'] = row.get('ID_CREDITO')
@@ -177,9 +210,13 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
             df_combined['MDA_TR'] = row.get('MDA_TR')
             df_combined['PMISTA'] = row.get('PMISTA')
 
-            clase_int = str(row.get('CLASE_INT', '')).strip()
-            df_combined['CLASE_INT'] = clase_int
-            df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
+            if 'clase_int_periodo' in df_combined.columns:
+                df_combined['CLASE_INT'] = df_combined['clase_int_periodo']
+                df_combined['tipo_tasa'] = df_combined['CLASE_INT'].apply(lambda x: 'FIJA' if str(x).strip() in FIXED_RATE_CODES else 'VARIABLE')
+            else:
+                clase_int = str(row.get('CLASE_INT', '')).strip()
+                df_combined['CLASE_INT'] = clase_int
+                df_combined['tipo_tasa'] = 'FIJA' if clase_int in FIXED_RATE_CODES else 'VARIABLE'
             df_combined['metodo_conteo'] = guias_row.get('METODO CONTEO')
 
             # --- CONVERT TO LOCAL CURRENCY LOGIC ---
@@ -201,7 +238,7 @@ def run_projection(df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas, sh
 
             all_flows.append(df_combined)
 
-    return all_flows, missing_nd_credits
+    return all_flows, projection_errors
 
 def main():
     logger.info("Starting Flow Generator...")
@@ -218,25 +255,90 @@ def main():
         return
 
     # Validations run once on original data
-    validate_data(df_oracle, df_inventario, df_guias)
+    initial_errors = validate_data(df_oracle, df_inventario, df_guias)
 
     # Run core projection logic
-    all_flows, missing_nd_credits = run_projection(
+    all_flows, projection_errors = run_projection(
         df_oracle, df_inventario, df_guias, df_tabla_nd, df_tasas
     )
+
+    projection_errors = initial_errors + projection_errors
 
     # Export
     export_flow(all_flows, FILE_OUTPUT)
 
-    # Print missing ND Summary
-    if missing_nd_credits:
+    # Export errors to TXT
+    if projection_errors:
+        error_file = os.path.join(os.path.dirname(FILE_OUTPUT), "errores_proyeccion.txt")
+        try:
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write("INFORME DE ERRORES DE PROYECCIÓN\n")
+                f.write("="*60 + "\n\n")
+
+                # Categorize errors and providing instructions
+                categories = {
+                    "FECHAS_INCORRECTAS": ("Créditos con FECHA VENCIMIENTO anterior a FECHA PRIMER PAGO",
+                                          "SOLUCIÓN: Revisar columnas 'PRIM_PAGO' y 'ULT_PAGO' en Oracle o 'FECHA PRIMER PAGO' y 'FECHA VENCIMIENTO' en Inventario."),
+
+                    "AMORTIZACION_VACIA_NO_BULLET": ("Créditos con TIPO AMORTIZACION vacío que no son BULLET",
+                                                    "SOLUCIÓN: Definir tipo (1, 2, 12 o ND) en columna 'TIPO AMORTIZACION' de Inventario Perfil."),
+
+                    "ND_NO_ENCONTRADO": ("Créditos TIPO ND no encontrados en TABLA_ND (se usó fallback semestral)",
+                                        "SOLUCIÓN: Agregar la tabla de porcentajes para este ID en 'tabla_nd.xlsx'."),
+
+                    "ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE": ("Créditos cuyo tramo no está en TABLA_ND pero el código base sí",
+                                                            "SOLUCIÓN: Verificar si el tramo debe tener la misma distribución que el código base en 'tabla_nd.xlsx'."),
+
+                    "ALINEACION_FECHAS_INCORRECTA": ("Créditos donde el vencimiento no coincide con el ciclo periódico",
+                                                    "SOLUCIÓN: Ajustar la 'FECHA VENCIMIENTO' en Inventario o revisar la periodicidad."),
+
+                    "SALDO_CERO_O_NEGATIVO": ("Créditos con saldo proyectable cero o negativo (ignorados)",
+                                             "SOLUCIÓN: Revisar columna 'SDO_US' en archivo de consulta Oracle."),
+
+                    "FALTA_EN_INVENTARIO": ("Créditos en Oracle no encontrados en Inventario Perfil",
+                                           "SOLUCIÓN: Agregar el registro del crédito en el archivo 'proy_inventario_perfil.xls'."),
+
+                    "VENCIMIENTO_MUY_LEJANO": ("Créditos con vencimiento mayor a 60 años (posible error)",
+                                              "SOLUCIÓN: Verificar el año en la columna 'FECHA VENCIMIENTO' de Inventario."),
+
+                    "INDICE_FALTANTE": ("Índices de tasa variable no encontrados en archivo de tasas",
+                                       "SOLUCIÓN: Agregar columna con proyecciones para este índice en 'Tasas_forward.xlsx'."),
+
+                    "TASA_FUERA_DE_RANGO": ("Tasas anuales calculadas inusualmente altas (>15%) o negativas",
+                                           "SOLUCIÓN: Revisar el 'MARGEN VALOR' en Inventario o Guías para este periodo."),
+
+                    "GAP_EN_GUIAS": ("Fechas de pago sin cobertura de guías de interés",
+                                    "SOLUCIÓN: Ampliar los rangos de fecha o agregar filas en 'proy_consulta_guias.xls'."),
+
+                    "GUIA_VENCE_ANTES_QUE_CAPITAL": ("La última guía de interés vence antes que el capital",
+                                                    "SOLUCIÓN: Actualizar la 'FECHA FINAL INTERES' en la última guía para que cubra el vencimiento del capital.")
+                }
+
+                for cat_key, cat_data in categories.items():
+                    cat_name, instruction = cat_data
+                    subset = [e for e in projection_errors if e['ERROR'] == cat_key]
+                    if subset:
+                        f.write(f"--- {cat_name} ---\n")
+                        f.write(f"{instruction}\n")
+                        f.write("-" * len(instruction) + "\n")
+                        # Deduplicate IDs within same category
+                        seen_ids = set()
+                        for e in subset:
+                            if e['ID_CREDITO'] not in seen_ids:
+                                f.write(f"ID: {e['ID_CREDITO']} | {e['DETALLE']}\n")
+                                seen_ids.add(e['ID_CREDITO'])
+                        f.write("\n")
+            logger.info(f"Reporte de errores generado en: {error_file}")
+        except Exception as e:
+            logger.error(f"No se pudo generar el reporte de errores: {e}")
+
+    # Print summary to console
+    if projection_errors:
         print("\n" + "="*50)
-        print("RESUMEN DE CRÉDITOS 'ND' NO ENCONTRADOS EN TABLA ND")
+        print("RESUMEN DE INCONSISTENCIAS ENCONTRADAS")
         print("="*50)
-        print("Los siguientes créditos tienen tipo de amortización 'ND',")
-        print("pero no se encontró su flujo de pago en 'tabla_nd.xlsx':\n")
-        for c in missing_nd_credits:
-            print(f" - {c}")
+        print(f"Se encontraron {len(projection_errors)} créditos con inconsistencias.")
+        print(f"Detalles exportados a: errores_proyeccion.txt")
         print("="*50 + "\n")
 
     logger.info("Processing complete.")

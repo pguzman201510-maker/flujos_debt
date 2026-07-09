@@ -39,45 +39,48 @@ Para créditos no fijos (por ejemplo, aquellos anclados a `ISOR`, `LUS3`, etc.),
 
 Existen escenarios excepcionales condicionados por la columna `PMISTA`.
 
-### 3.1 Primas Escalonadas para `BIRF`
-Para los créditos donde el acreedor (`PMISTA`) es **`BIRF`**, la tasa base es reemplazada y se suman primas por plazo de vencimiento. La "maduración" del crédito en años se determina restando `PRIM_PAGO` a `ULT_PAGO`.
-
-* **Créditos `UBIR`:**
-  Se fuerza el uso del índice Forward **`TSO6`** y se suma un spread (premium) así:
-  * `< 7 años`: + 0.75% (`0.0075`)
-  * `Hasta 8 años`: + 1.05% (`0.0105`)
-  * `Hasta 12 años`: + 1.20% (`0.0120`)
-  * `Hasta 15 años`: + 1.35% (`0.0135`)
-  * `Hasta 18 años`: + 1.50% (`0.0150`)
-  * `Más de 18 años`: + 1.65% (`0.0165`)
-
-* **Créditos `EBIR`:**
-  Se fuerza el uso del índice Forward **`EUL6`** y se suma el siguiente premium:
-  * `< 7 años`: + 0.61% (`0.0061`)
-  * `Hasta 8 años`: + 0.71% (`0.0071`)
-  * `Hasta 12 años`: + 0.86% (`0.0086`)
-  * `Hasta 15 años`: + 1.01% (`0.0101`)
-  * `Hasta 18 años`: + 1.16% (`0.0116`)
-  * `Más de 18 años`: + 1.31% (`0.0131`)
-
-**Resultado BIRF:** `base_annual_rate = (Forward_Específico / 100) + Premium_Maturity + MARGEN VALOR`
-
-### 3.2 Margen Adicional para `BID`
+### 3.1 Margen Adicional para `BID`
 Para los créditos cuyo acreedor (`PMISTA`) es **`BID`** **y su tasa sea variable**, se adiciona un margen regulatorio (`MBID_RATE`, parametrizable en `config/settings.py`, por defecto `0.80%`).
 * `base_annual_rate = base_annual_rate + 0.0080`
 
 ---
 
-## 4. Sensibilidad (Choques)
+## 4. Columnas de Auditoría y Verificación
 
-Si el usuario ejecuta la herramienta en modo interactivo (`sensibilidad.py`), puede inyectar un escenario de estrés (`shock_int`). Este estrés es un sumatorio plano porcentual:
-* `base_annual_rate = base_annual_rate + (shock_int / 100)`
+Para facilitar la auditoría de los cálculos y permitir la validación manual contra herramientas externas (como Excel), el sistema exporta columnas adicionales:
 
-*(Ejemplo: Un choque de `+1.5%` sumará `0.015` directo a la tasa nominal).*
+* **`valor_indice`**: El valor crudo extraído de `Tasas_forward.xlsx` (en decimal, ej: `0.0244`).
+* **`margen_aplicado`**: El `MARGEN VALOR` detectado para el periodo.
+* **`tasa_aplicada`**: Representa la tasa efectiva del periodo:
+  * Para **Tasas Variables**: Es la tasa de periodo (`base_annual_rate / Frecuencia`).
+  * Para **Tasas Fijas**: Es la tasa nominal anual (`base_annual_rate`).
 
 ---
 
-## 5. Aplicación Final: Factor de Tiempo vs Frecuencia
+## 5. Sensibilidad (Choques)
+
+La herramienta `sensibilidad.py` permite modelar escenarios de estrés sobre las tasas de interés y de cambio:
+
+### 5.1 Choques de Interés Segmentados
+El usuario puede elegir aplicar el choque (`shock_int`) a:
+* **Solo Tasas Variables**: Afecta solo a créditos con clase de interés forward.
+* **Solo Tasas Fijas**: Afecta solo a créditos con clase de interés fija (FUFI, FIJA, etc.).
+* **Ambas**: Aplica el choque a todo el portafolio.
+
+Fórmula: `base_annual_rate = base_annual_rate + (shock_int / 100)`
+
+### 5.2 Choques de Tasa de Cambio (TC)
+El choque de TC altera el saldo proyectable (`SDO_US`) recalculando la equivalencia dólar basada en la moneda local (`SALDO_REAL`) con un factor de estrés porcentual.
+
+### 5.3 Reporte de Resumen Granular
+El archivo `flujo_sensibilidad.xlsx` incluye una hoja de **Resumen** altamente detallada:
+*   **Segmentación por Tasa**: Desglosa el impacto del choque de interés para cada índice proyectado (ej. SOFR, EUL6, FIJA).
+*   **Segmentación por Moneda**: Muestra cómo el choque de TC afecta individualmente a cada moneda (COP, EUR, CHF, etc.) y calcula la tasa de cambio implícita resultante.
+*   **Métricas de Impacto**: Compara el escenario Base vs. Shock, calculando la sensibilidad en términos monetarios absolutos y en puntos porcentuales de variación sobre el agregado.
+
+---
+
+## 6. Aplicación Final: Factor de Tiempo vs Frecuencia
 
 Para obtener el cobro real de la cuota (`pago_interes`), la tasa de interés anual debe convertirse en una tasa de periodo y multiplicarse por el capital.
 
@@ -104,3 +107,28 @@ Las tasas fijas aplican factores dinámicos evaluando los días calendario exact
 Para todos los métodos fijos el cálculo resultante es:
 * `Factor = Días_Del_Periodo / Base_Anual (360 o 365)`
 * *Resultado:* `Pago Interés = Saldo Insoluto × base_annual_rate × Factor`
+
+---
+
+## 7. Jerarquía de Amortización y Manejo de Errores
+
+El motor de amortización (`modules/calendar_generator.py`) determina las fechas de pago siguiendo esta jerarquía:
+1. **Bullet Directo**: Si `FECHA PRIMER PAGO` es igual a `FECHA VENCIMIENTO`, o si faltan datos de periodicidad pero las fechas coinciden, se asume un pago único al final.
+2. **Tablas Irregulares (ND)**: Si el tipo es `ND` o si la celda está **vacía** (pero no es Bullet), se busca el `ID_CREDITO` en `tabla_nd.xlsx`.
+3. **Periodicidad Estándar**: Si no es irregular, se usan los códigos `1` (Anual), `2` (Semestral) o `12` (Mensual).
+4. **Fallback de Intereses**: Si la periodicidad de amortización está vacía, se intenta heredar la periodicidad de pago de intereses.
+
+### Reporte de Inconsistencias (`errores_proyeccion.txt`)
+El sistema genera automáticamente un archivo de texto con los créditos que presentaron problemas, incluyendo instrucciones de solución:
+* **FECHAS_INCORRECTAS**: Créditos donde la fecha de vencimiento es anterior a la de inicio (`ULT_PAGO < PRIM_PAGO`).
+* **ND_NO_ENCONTRADO**: Créditos marcados como `ND` que no existen en la tabla auxiliar.
+* **ND_TRAMO_FALTANTE_PERO_CODIGO_EXISTE**: Cuando el tramo específico no está en `tabla_nd` pero el código base sí.
+* **AMORTIZACION_VACIA_NO_BULLET**: Créditos sin tipo de amortización que no pudieron ser resueltos como Bullet.
+* **ALINEACION_FECHAS_INCORRECTA**: Créditos donde el ciclo periódico no aterriza exactamente en el vencimiento final.
+* **SALDO_CERO_O_NEGATIVO**: Créditos con saldo en USD reportado como cero o negativo (se omiten de la proyección).
+* **FALTA_EN_INVENTARIO**: Créditos reportados en Oracle que no existen en el archivo de Inventario Perfil.
+* **VENCIMIENTO_MUY_LEJANO**: Créditos con vencimientos superiores a 60 años (posibles errores de digitación).
+* **INDICE_FALTANTE**: Créditos de tasa variable cuyo índice no tiene proyecciones en `Tasas_forward.xlsx`.
+* **TASA_FUERA_DE_RANGO**: Periodos donde la tasa anual calculada es negativa o superior al 15%.
+* **GAP_EN_GUIAS**: Fechas de pago que no están cubiertas por ningún rango de fecha en las Guías de Interés.
+* **GUIA_VENCE_ANTES_QUE_CAPITAL**: Cuando la última guía definida vence antes que el capital del crédito.

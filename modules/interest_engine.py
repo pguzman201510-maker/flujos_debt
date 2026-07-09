@@ -5,54 +5,46 @@ from modules.forward_rates import get_forward_rate
 
 logger = logging.getLogger(__name__)
 
-def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_inv, row_guias, df_tasas, compute_day_count, shock_int=0.0):
+def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, row_inv, row_guias, df_tasas, compute_day_count, shock_int=0.0, shock_target='AMBAS'):
     """
     Computes interest payments for each period in the standalone interest flow.
     interest_dates: list of pd.Timestamp
     df_amortization_flow: DataFrame containing 'fecha_operacion', 'saldo_insoluto'.
     row_oracle: contains CLASE_INT, MARGEN_VALOR, SDO_US
     row_inv: contains accurate unrounded MARGEN VALOR
-    row_guias: contains METODO CONTEO, FECHA INICIAL INTERES
+    row_guias: can be a Series or a DataFrame with columns METODO CONTEO, FECHA INICIAL INTERES, FECHA FINAL INTERES, TASA INTERES, MARGEN VALOR
     df_tasas: DataFrame for forward rates.
     compute_day_count: callable function compute_day_count(start_date, end_date, method) -> (days, factor)
+    shock_target: 'FIJA', 'VARIABLE', or 'AMBAS'
+    Returns (df_flow, list_of_errors)
     """
+    errors = []
+    cred_id = row_oracle.get('ID_CREDITO', 'Unknown')
     if not interest_dates:
-        return pd.DataFrame()
+        return pd.DataFrame(), []
 
-    clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
+    def get_active_guide(date):
+        if not isinstance(row_guias, pd.DataFrame) or row_guias.empty:
+            return row_guias
 
-    margen = 0.0
+        # Look for a guide where date falls between FECHA INICIAL INTERES and FECHA FINAL INTERES
+        # Using pre-converted columns from main.py
+        mask = (row_guias['FECHA INICIAL INTERES_DT'] <= date) & (date <= row_guias['FECHA FINAL INTERES_DT'])
+        active = row_guias[mask]
 
-    # Try Inventario MARGEN VALOR first (high precision decimal)
-    val_inv = row_inv.get('MARGEN VALOR') if row_inv is not None else None
-    if not pd.isna(val_inv) and str(val_inv).strip() != '' and str(val_inv).strip().upper() != 'GUIA':
-        try:
-            margen = float(val_inv)
-        except:
-            pass
+        if not active.empty:
+            return active.iloc[0]
 
-    # If GUIA or missing, try Guias MARGEN VALOR
-    if margen == 0.0 and row_guias is not None and 'MARGEN VALOR' in row_guias:
-        val_guias = row_guias.get('MARGEN VALOR')
-        if not pd.isna(val_guias) and str(val_guias).strip() != '':
-            try:
-                margen = float(val_guias)
-            except:
-                pass
+        # Fallback to the most recent guide if none found for this date
+        return row_guias.iloc[-1]
 
-    # Fallback to Oracle
-    if margen == 0.0:
-        try:
-            val_or = row_oracle.get('MARGEN_VALOR', 0.0)
-            if not pd.isna(val_or) and str(val_or).strip() != '':
-                m = float(val_or)
-                # Oracle margin might be in percentages like 4.8 instead of 0.048
-                margen = m / 100.0 if m > 1 else m
-                margen = margen / 100.0 if margen > 0.5 else margen
-        except:
-            margen = 0.0
+    # Use representative guide for initial parameters
+    if isinstance(row_guias, pd.DataFrame) and not row_guias.empty:
+        guide_rep = row_guias.iloc[-1] # default to most recent
+    else:
+        guide_rep = row_guias
 
-    metodo_conteo = row_guias.get('METODO CONTEO') if row_guias is not None else None
+    metodo_conteo_rep = guide_rep.get('METODO CONTEO') if guide_rep is not None else None
 
     try:
         initial_balance = float(row_oracle.get('SDO_US', 0))
@@ -62,45 +54,45 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
     # Determine the step in months for fallback if start_date needs adjustment
     from dateutil.relativedelta import relativedelta
 
-    periodicity = '6'
+    periodicity_rep = '6'
     if row_inv is not None and 'PERIODICIDAD PAGO INTERESES' in row_inv:
         val_per = row_inv.get('PERIODICIDAD PAGO INTERESES')
         if pd.notna(val_per) and str(val_per).strip() != '':
-            periodicity = str(val_per).strip().upper()
+            periodicity_rep = str(val_per).strip().upper()
 
-    if periodicity == 'GUIA' and row_guias is not None:
-        periodicity = str(row_guias.get('MES PERIODICIDAD', '6')).strip()
+    if periodicity_rep == 'GUIA' and guide_rep is not None:
+        periodicity_rep = str(guide_rep.get('MES PERIODICIDAD', '6')).strip()
 
     try:
-        p = float(periodicity)
+        p_rep = float(periodicity_rep)
     except:
-        p = 6
-    months_step = 12 if p == 1 else (6 if p == 2 else (1 if p == 12 else (int(p) if p > 0 else 6)))
+        p_rep = 6
+    months_step_rep = 12 if p_rep == 1 else (6 if p_rep == 2 else (1 if p_rep == 12 else (int(p_rep) if p_rep > 0 else 6)))
 
     # Start date of accrual
-    start_date = pd.to_datetime(row_guias.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True) if row_guias is not None else None
+    start_date = pd.to_datetime(guide_rep.get('FECHA INICIAL INTERES'), errors='coerce', dayfirst=True) if guide_rep is not None else None
     if pd.isna(start_date):
         # Fallback to some date if missing
-        start_date = interest_dates[0] - pd.DateOffset(months=months_step)
+        start_date = interest_dates[0] - pd.DateOffset(months=months_step_rep)
 
     # If the first interest date in our list is far ahead of start_date (because earlier ones were filtered by cutoff)
     # the accrual should only be from the previous periodicity, not from the very beginning.
     # While start_date + N*periodicity < interest_dates[0]... advance it.
     first_payment = interest_dates[0]
     curr = start_date
-    while curr + relativedelta(months=months_step) <= first_payment:
+    while curr + relativedelta(months=months_step_rep) <= first_payment:
         # Don't advance if the exact step lands on first payment, we want accrual start to be strictly before
-        if curr + relativedelta(months=months_step) == first_payment:
-            curr += relativedelta(months=months_step)
+        if curr + relativedelta(months=months_step_rep) == first_payment:
+            curr += relativedelta(months=months_step_rep)
             break
-        curr += relativedelta(months=months_step)
+        curr += relativedelta(months=months_step_rep)
 
     # But we want the start of the accrual period FOR the first payment, which is one step before
     if curr == first_payment:
-        start_date = curr - relativedelta(months=months_step)
+        start_date = curr - relativedelta(months=months_step_rep)
     else:
         # In case it didn't align perfectly, just take the max of start_date or first_payment - step
-        inferred_start = first_payment - relativedelta(months=months_step)
+        inferred_start = first_payment - relativedelta(months=months_step_rep)
         start_date = max(start_date, inferred_start)
 
     # Helper to get outstanding balance AT a specific date
@@ -121,9 +113,82 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
 
     current_start = start_date
     for current_date in interest_dates:
+        # Dynamic active guide lookup
+        active_guide = get_active_guide(current_date)
+
+        # Validation: Gap in guide coverage
+        if isinstance(row_guias, pd.DataFrame) and not row_guias.empty:
+             mask = (row_guias['FECHA INICIAL INTERES_DT'] <= current_date) & (current_date <= row_guias['FECHA FINAL INTERES_DT'])
+             if not mask.any():
+                 errors.append({'ID_CREDITO': cred_id, 'ERROR': 'GAP_EN_GUIAS', 'DETALLE': f"No hay guía válida para la fecha {current_date.date()}"})
+
+        # Validation: End date discrepancy
+        ult_pago_amort = pd.to_datetime(row_oracle.get('ULT_PAGO'), errors='coerce')
+        if active_guide is not None and not pd.isna(ult_pago_amort):
+             final_guia = pd.to_datetime(active_guide.get('FECHA FINAL INTERES_DT'), errors='coerce')
+             if not pd.isna(final_guia) and final_guia < ult_pago_amort:
+                  # If we're at the last date or it's a structural gap
+                  if current_date == interest_dates[-1]:
+                      errors.append({'ID_CREDITO': cred_id, 'ERROR': 'GUIA_VENCE_ANTES_QUE_CAPITAL', 'DETALLE': f"Última guía vence el {final_guia.date()}, pero el capital vence el {ult_pago_amort.date()}"})
+
+        # 1. Determine Rate Type (clase_int)
+        # Prioritize TASA INTERES from Guide
+        clase_int = str(active_guide.get('TASA INTERES', '')).strip() if active_guide is not None else ''
+        if not clase_int or clase_int.upper() == 'NAN':
+            clase_int = str(row_oracle.get('CLASE_INT', '')).strip()
+
+        # 2. Determine Margin
+        margen = 0.0
+        # Try Inventario MARGEN VALOR first (high precision decimal)
+        val_inv = row_inv.get('MARGEN VALOR') if row_inv is not None else None
+        if not pd.isna(val_inv) and str(val_inv).strip() != '' and str(val_inv).strip().upper() != 'GUIA':
+            try:
+                margen = float(val_inv)
+            except:
+                pass
+
+        # If GUIA or missing, try Guias MARGEN VALOR
+        if margen == 0.0 and active_guide is not None and 'MARGEN VALOR' in active_guide:
+            val_guias = active_guide.get('MARGEN VALOR')
+            if not pd.isna(val_guias) and str(val_guias).strip() != '':
+                try:
+                    margen = float(val_guias)
+                except:
+                    pass
+
+        # Fallback to Oracle
+        if margen == 0.0:
+            try:
+                val_or = row_oracle.get('MARGEN_VALOR', 0.0)
+                if not pd.isna(val_or) and str(val_or).strip() != '':
+                    m = float(val_or)
+                    # Oracle margin might be in percentages like 4.8 instead of 0.048
+                    margen = m / 100.0 if m > 1 else m
+                    margen = margen / 100.0 if margen > 0.5 else margen
+            except:
+                margen = 0.0
+
+        # 3. Determine Method/Periodicity
+        metodo_conteo = active_guide.get('METODO CONTEO') if active_guide is not None else metodo_conteo_rep
+
+        periodicity = '6'
+        if row_inv is not None and 'PERIODICIDAD PAGO INTERESES' in row_inv:
+            val_per = row_inv.get('PERIODICIDAD PAGO INTERESES')
+            if pd.notna(val_per) and str(val_per).strip() != '':
+                periodicity = str(val_per).strip().upper()
+
+        if periodicity == 'GUIA' and active_guide is not None:
+            periodicity = str(active_guide.get('MES PERIODICIDAD', '6')).strip()
+
+        try:
+            p = float(periodicity)
+        except:
+            p = 6
+
         # MBID/BIRF Specific Logic
         pmista = str(row_oracle.get('PMISTA', '')).strip().upper()
 
+        # Re-evaluate rate type based on dynamic clase_int
         is_fixed = clase_int in FIXED_RATE_CODES
 
         # Base annual rate components
@@ -135,42 +200,29 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
         else:
             # Variable rate
             index_col = clase_int
-
-            if pmista == 'BIRF':
-                # Calculate maturity in years from PRIM_PAGO to ULT_PAGO
-                prim_pago = pd.to_datetime(row_oracle.get('PRIM_PAGO'), errors='coerce')
-                ult_pago = pd.to_datetime(row_oracle.get('ULT_PAGO'), errors='coerce')
-                years = 0.0
-                if not pd.isna(prim_pago) and not pd.isna(ult_pago) and ult_pago >= prim_pago:
-                    years = (ult_pago - prim_pago).days / 365.25
-
-                if clase_int == 'UBIR':
-                    index_col = 'TSO6'
-                    if years < 7: spread_premium = 0.0075
-                    elif years <= 8: spread_premium = 0.0105
-                    elif years <= 12: spread_premium = 0.0120
-                    elif years <= 15: spread_premium = 0.0135
-                    elif years <= 18: spread_premium = 0.0150
-                    else: spread_premium = 0.0165
-                elif clase_int == 'EBIR':
-                    index_col = 'EUL6'
-                    if years < 7: spread_premium = 0.0061
-                    elif years <= 8: spread_premium = 0.0071
-                    elif years <= 12: spread_premium = 0.0086
-                    elif years <= 15: spread_premium = 0.0101
-                    elif years <= 18: spread_premium = 0.0116
-                    else: spread_premium = 0.0131
-
             forward_val = get_forward_rate(df_tasas, index_col, current_date) / 100.0
+
+            # Validation: Missing Index
+            if forward_val == 0.0 and index_col not in ['SINI', 'FIJA', 'FUFI']:
+                # Check if it's actually in df_tasas
+                if df_tasas is not None and index_col not in df_tasas.columns:
+                     errors.append({'ID_CREDITO': cred_id, 'ERROR': 'INDICE_FALTANTE', 'DETALLE': f"El índice {index_col} no existe en Tasas_forward.xlsx"})
+
             base_annual_rate = forward_val + spread_premium + margen
 
         # Add Annual MBID margin (Only for variable rates per user instruction)
         if pmista == 'BID' and not is_fixed:
             base_annual_rate += MBID_RATE
 
-        # Add Annual shock
+        # Add Annual shock conditionally
         if shock_int != 0.0:
-            base_annual_rate += (shock_int / 100.0)
+            apply_shock = False
+            if shock_target == 'AMBAS': apply_shock = True
+            elif shock_target == 'FIJA' and is_fixed: apply_shock = True
+            elif shock_target == 'VARIABLE' and not is_fixed: apply_shock = True
+
+            if apply_shock:
+                base_annual_rate += (shock_int / 100.0)
 
         # Day count or Frequency division
         if current_start >= current_date:
@@ -184,19 +236,32 @@ def calculate_interest_flow(interest_dates, df_amortization_flow, row_oracle, ro
             # Fixed rates continue using standard Day Count Conventions
             _, factor = compute_day_count(current_start, current_date, metodo_conteo)
 
-        rate = base_annual_rate
+        # Validation: Out of range rates
+        if base_annual_rate > 0.15 or base_annual_rate < 0:
+             errors.append({'ID_CREDITO': cred_id, 'ERROR': 'TASA_FUERA_DE_RANGO', 'DETALLE': f"Tasa anual calculada: {round(base_annual_rate*100, 2)}%"})
 
         # Balance used is the balance at `current_start`
         balance = get_balance_at(current_start)
 
-        interes = balance * rate * factor
+        interes = balance * base_annual_rate * factor
+
+        # User requested tasa_aplicada to be the periodic rate for variable interests
+        # for easier verification against manual calculations
+        if not is_fixed:
+            applied_rate_report = base_annual_rate * factor
+        else:
+            applied_rate_report = base_annual_rate
+
         flow.append({
             'fecha_operacion': current_date,
             'pago_interes': max(0, interes),
-            'tasa_aplicada': rate
+            'tasa_aplicada': applied_rate_report,
+            'clase_int_periodo': clase_int,
+            'margen_aplicado': margen,
+            'valor_indice': forward_val
         })
 
         # Advance
         current_start = current_date
 
-    return pd.DataFrame(flow)
+    return pd.DataFrame(flow), errors
