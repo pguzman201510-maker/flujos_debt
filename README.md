@@ -25,8 +25,12 @@ La herramienta espera leer 5 archivos de entrada ubicados en la carpeta principa
 Para iniciar el procesamiento y generar el flujo, abra una terminal en el directorio raíz del proyecto y ejecute:
 
 ```bash
-python main.py
+./run_all.sh
 ```
+*O alternativamente: `python main.py`*
+
+### Arquitectura del Pipeline
+Para una descripción técnica detallada de cómo fluye la información entre los módulos y qué validaciones se aplican, consulte el archivo **[PIPELINE.md](PIPELINE.md)**.
 
 ### Herramienta de Auditoría (Buscador)
 Si desea auditar qué información exacta está tomando el sistema para un crédito específico, puede usar el buscador:
